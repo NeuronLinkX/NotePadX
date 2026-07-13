@@ -1,0 +1,77 @@
+name: NotepadX
+options:
+  bundleIdPrefix: com.notepadx
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    # Phase 6.2 Microsoft Graph. 비워두면 로컬 전용 OneDrive 폴더 동기화만 동작한다
+    # (MicrosoftGraphConfig.clientID가 nil이 됨). 실제 값을 테스트하려면 이 두 줄을
+    # 직접 채우거나, project.yml을 커밋하지 않는 자신만의 로컬 사본에서 바꿔 쓴다.
+    MICROSOFT_ENTRA_CLIENT_ID: ""
+    MICROSOFT_ENTRA_REDIRECT_URI: "msauth.com.notepadx.app://auth"
+
+targets:
+  NotepadX:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/NotepadX
+        excludes:
+          - "Resources/Info.plist"
+          - "Resources/NotepadX.entitlements"
+          - "Resources/WebEditor/**"
+      # 폴더 참조(blue folder)로 추가해야 index.html이 참조하는 dist/editor.bundle.js,
+      # editor.css 같은 상대 경로가 번들 안에서도 그대로 유지된다.
+      - path: Sources/NotepadX/Resources/WebEditor
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: NotepadX
+        PRODUCT_BUNDLE_IDENTIFIER: com.notepadx.app
+        INFOPLIST_FILE: Sources/NotepadX/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Sources/NotepadX/Resources/NotepadX.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_STRICT_CONCURRENCY: minimal
+    scheme:
+      testTargets:
+        - NotepadXTests
+      commandLineArguments: {}
+
+  NotepadXTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/NotepadXTests
+    dependencies:
+      - target: NotepadX
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/NotepadX.app/Contents/MacOS/NotepadX"
+
+schemes:
+  NotepadX:
+    build:
+      targets:
+        NotepadX: all
+        NotepadXTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - NotepadXTests
+    archive:
+      config: Release

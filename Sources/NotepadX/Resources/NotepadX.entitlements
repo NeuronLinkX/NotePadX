@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- Phase 6 OneDrive 폴더 선택(NSOpenPanel)과 파일 내보내기(DOCX/PDF 등 저장 패널)에 필요 -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <!-- Phase 7 OpenAI API 및 Phase 6.2 Microsoft Graph 통신에 필요 -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Phase 6 보안 스코프 북마크(OneDrive 동기화 폴더 재접근)에 필요 -->
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+</dict>
+</plist>

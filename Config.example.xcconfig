@@ -1,0 +1,18 @@
+// 이 파일을 Config.xcconfig로 복사한 뒤 실제 값을 채워 넣는다.
+// Config.xcconfig는 .gitignore에 포함되어 있어 커밋되지 않는다.
+//
+// Phase 1(현재)에서는 아래 값이 아직 어떤 빌드 설정에도 연결되어 있지 않다.
+// Phase 6(OneDrive/Microsoft Graph)과 Phase 7(OpenAI)에서 project.yml의
+// INFOPLIST_KEY_* / xcconfig 참조로 연결할 예정이며, 값이 비어 있어도
+// 로컬 전용 기능(노트 CRUD, 폴더, 검색 등)은 정상 동작해야 한다.
+
+// Microsoft Entra (Azure AD) 앱 등록의 Application (client) ID.
+// 비워두면 OneDrive는 Finder 동기화 폴더 방식만 동작하고
+// Microsoft Graph 로그인 버튼은 비활성화된다.
+MICROSOFT_ENTRA_CLIENT_ID =
+
+// Microsoft Graph OAuth Redirect URI. 예: msauth.com.notepadx.app://auth
+MICROSOFT_ENTRA_REDIRECT_URI =
+
+// OpenAI API 키는 절대 이 파일이나 소스 코드에 넣지 않는다.
+// 앱 실행 후 설정 > AI 탭에서 입력하면 macOS Keychain에만 저장된다.
