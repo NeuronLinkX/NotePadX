@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(brew install *)",
+      "Bash(export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer)",
+      "Bash(swift test *)",
+      "Bash(xcodegen generate *)",
+      "Bash(npm --version)",
+      "Bash(npm run *)",
+      "Bash(npm audit *)",
+      "Bash(swift build *)",
+      "Read(//Users/juhee/Library/Logs/DiagnosticReports/**)",
+      "Bash(log show *)",
+      "Bash(xcodebuild -project NotepadX.xcodeproj -scheme NotepadX -configuration Debug -destination 'platform=macOS' CODE_SIGN_IDENTITY=\"-\" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO build)",
+      "Bash(sqlite3 /tmp/fts_test2.sqlite)",
+      "Bash(rm -f /tmp/fts_test2.sqlite)",
+      "Bash(grep -rn \"func find\\\\|clearFindResults\\\\|WKFindConfiguration\\\\|WKFindResult\" /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX*.sdk/System/Library/Frameworks/WebKit.framework/Headers/*.h 2>/dev/null)",
+      "Bash(unzip -v)",
+      "Bash(mdfind \"kMDItemCFBundleIdentifier == 'com.microsoft.Word'\")",
+      "Bash(osascript -e 'tell application \"System Events\" to \\(name of processes\\) contains \"Microsoft Word\"')",
+      "Bash(osascript -e 'tell application \"Microsoft Word\" to count documents')",
+      "Bash(osascript -e 'tell application \"Microsoft Word\" to get name of every window')",
+      "Bash(osascript -e 'tell application \"System Events\" to tell process \"Microsoft Word\" to get name of every window')",
+      "Bash(python3 -c \"import PIL; print\\(PIL.__version__\\)\")",
+      "Bash(python3 /private/tmp/claude-501/-Users-juhee-Desktop-Notepad/92ab44c1-70c2-4de0-85eb-fd0c1644b51c/scratchpad/icon/make_icon.py)",
+      "Bash(python3)",
+      "Bash(xcodebuild -project NotepadX.xcodeproj -scheme NotepadX -configuration Debug build)",
+      "Bash(codesign -d --entitlements :- /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Debug/NotepadX.app)",
+      "Bash(xcodebuild -project NotepadX.xcodeproj -scheme NotepadX -configuration Release build)",
+      "Bash(codesign -d --entitlements :- /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Release/NotepadX.app)",
+      "Bash(codesign -dv /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Release/NotepadX.app)",
+      "Bash(spctl -a -vvv /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Release/NotepadX.app)",
+      "Bash(sw_vers)",
+      "Bash(/usr/libexec/PlistBuddy -c 'Print :NSAppleEventsUsageDescription' /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Debug/NotepadX.app/Contents/Info.plist)"
+    ]
+  }
+}

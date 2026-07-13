@@ -1,0 +1,236 @@
+:root {
+  color-scheme: light dark;
+  --nx-text: #1c1c1e;
+  --nx-text-secondary: #6e6e73;
+  --nx-bg: #ffffff;
+  --nx-border: #d8d8dc;
+  --nx-code-bg: #f5f5f7;
+  --nx-blockquote-border: #c7c7cc;
+  --nx-selection: rgba(0, 122, 255, 0.2);
+  --nx-link: #0a6cff;
+  --nx-table-header-bg: #f0f0f3;
+
+  --hljs-comment: #6e7781;
+  --hljs-keyword: #cf222e;
+  --hljs-string: #0a3069;
+  --hljs-number: #0550ae;
+  --hljs-title: #8250df;
+  --hljs-attr: #953800;
+  --hljs-built_in: #116329;
+  --hljs-type: #953800;
+  --hljs-tag: #116329;
+  --hljs-meta: #6e7781;
+}
+
+:root[data-theme="dark"] {
+  --nx-text: #f2f2f7;
+  --nx-text-secondary: #98989f;
+  --nx-bg: #1e1e1e;
+  --nx-border: #3a3a3c;
+  --nx-code-bg: #2c2c2e;
+  --nx-blockquote-border: #48484a;
+  --nx-selection: rgba(10, 132, 255, 0.35);
+  --nx-link: #4da3ff;
+  --nx-table-header-bg: #2c2c2e;
+
+  --hljs-comment: #8b949e;
+  --hljs-keyword: #ff7b72;
+  --hljs-string: #a5d6ff;
+  --hljs-number: #79c0ff;
+  --hljs-title: #d2a8ff;
+  --hljs-attr: #ffa657;
+  --hljs-built_in: #7ee787;
+  --hljs-type: #ffa657;
+  --hljs-tag: #7ee787;
+  --hljs-meta: #8b949e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --nx-text: #f2f2f7;
+    --nx-text-secondary: #98989f;
+    --nx-bg: #1e1e1e;
+    --nx-border: #3a3a3c;
+    --nx-code-bg: #2c2c2e;
+    --nx-blockquote-border: #48484a;
+    --nx-selection: rgba(10, 132, 255, 0.35);
+    --nx-link: #4da3ff;
+    --nx-table-header-bg: #2c2c2e;
+    --hljs-comment: #8b949e;
+    --hljs-keyword: #ff7b72;
+    --hljs-string: #a5d6ff;
+    --hljs-number: #79c0ff;
+    --hljs-title: #d2a8ff;
+    --hljs-attr: #ffa657;
+    --hljs-built_in: #7ee787;
+    --hljs-type: #ffa657;
+    --hljs-tag: #7ee787;
+    --hljs-meta: #8b949e;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--nx-bg);
+  color: var(--nx-text);
+  font: -apple-system-body;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+
+#editor-root { min-height: 100%; }
+
+.ProseMirror {
+  outline: none;
+  padding: 4px 16px 40px;
+  font-size: 15px;
+  line-height: 1.6;
+  caret-color: var(--nx-link);
+}
+
+.ProseMirror ::selection { background: var(--nx-selection); }
+
+.ProseMirror h1, .ProseMirror h2, .ProseMirror h3,
+.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 {
+  line-height: 1.3;
+  margin: 1.2em 0 0.4em;
+}
+.ProseMirror h1 { font-size: 1.8em; }
+.ProseMirror h2 { font-size: 1.5em; }
+.ProseMirror h3 { font-size: 1.3em; }
+.ProseMirror h4 { font-size: 1.15em; }
+.ProseMirror h5 { font-size: 1.05em; }
+.ProseMirror h6 { font-size: 1em; color: var(--nx-text-secondary); }
+
+.ProseMirror p { margin: 0.4em 0; }
+
+.ProseMirror a { color: var(--nx-link); cursor: pointer; }
+
+.ProseMirror blockquote {
+  margin: 0.6em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--nx-blockquote-border);
+  color: var(--nx-text-secondary);
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--nx-border);
+  margin: 1.5em 0;
+}
+
+.ProseMirror ul, .ProseMirror ol { padding-left: 1.4em; }
+.ProseMirror li { margin: 0.15em 0; }
+
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.ProseMirror ul[data-type="taskList"] li > label { margin-top: 3px; }
+.ProseMirror ul[data-type="taskList"] li > div { flex: 1; }
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--nx-text-secondary); text-decoration: line-through; }
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+.ProseMirror code:not(pre code) {
+  background: var(--nx-code-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+.ProseMirror pre {
+  background: var(--nx-code-bg);
+  border: 1px solid var(--nx-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.ProseMirror pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  white-space: pre;
+}
+
+.hljs-comment, .hljs-quote { color: var(--hljs-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-subst { color: var(--hljs-keyword); }
+.hljs-number, .hljs-literal { color: var(--hljs-number); }
+.hljs-string, .hljs-doctag, .hljs-regexp { color: var(--hljs-string); }
+.hljs-title, .hljs-section, .hljs-selector-id, .hljs-name, .hljs-class .hljs-title {
+  color: var(--hljs-title);
+}
+.hljs-attr, .hljs-attribute, .hljs-meta-string { color: var(--hljs-attr); }
+.hljs-built_in, .hljs-type, .hljs-symbol, .hljs-bullet { color: var(--hljs-built_in); }
+.hljs-tag { color: var(--hljs-tag); }
+.hljs-meta, .hljs-meta-keyword { color: var(--hljs-meta); }
+.hljs-deletion { background: rgba(255, 0, 0, 0.15); }
+.hljs-addition { background: rgba(0, 255, 0, 0.12); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: bold; }
+
+.ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0.8em 0;
+}
+.ProseMirror th, .ProseMirror td {
+  border: 1px solid var(--nx-border);
+  padding: 6px 8px;
+  vertical-align: top;
+  position: relative;
+}
+.ProseMirror th {
+  background: var(--nx-table-header-bg);
+  font-weight: 600;
+  text-align: left;
+}
+.ProseMirror .selectedCell { background: var(--nx-selection); }
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--nx-link);
+  pointer-events: none;
+}
+
+.ProseMirror details {
+  border: 1px solid var(--nx-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin: 0.6em 0;
+}
+.ProseMirror details > summary { font-weight: 600; cursor: pointer; }
+.ProseMirror details > div[data-details-content] { margin-top: 6px; }
+
+.nx-file-attachment {
+  display: inline-block;
+  border: 1px solid var(--nx-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--nx-code-bg);
+  font-size: 0.9em;
+}
+
+.ProseMirror img { max-width: 100%; border-radius: 6px; }
+
+.ProseMirror .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--nx-text-secondary);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}

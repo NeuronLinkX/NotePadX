@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <!--
+    스펙 22절: WKWebView에서 네트워크 접근이 필요 없으므로 connect-src를 완전히 막는다.
+    script-src는 번들된 self 스크립트만 허용해 외부/인라인 스크립트 실행을 차단한다.
+    style-src는 Tiptap이 색상/글자크기/표 너비를 인라인 style 속성으로 적용하므로
+    unsafe-inline을 허용하되, script는 절대 인라인을 허용하지 않는다.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data:;
+    font-src 'self';
+    connect-src 'none';
+    base-uri 'none';
+    form-action 'none';
+  " />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="editor.css" />
+  <title>NotepadX Editor</title>
+</head>
+<body>
+  <div id="editor-root"></div>
+  <script src="dist/editor.bundle.js"></script>
+</body>
+</html>
