@@ -31,7 +31,8 @@
       "Bash(codesign -dv /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Release/NotepadX.app)",
       "Bash(spctl -a -vvv /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Release/NotepadX.app)",
       "Bash(sw_vers)",
-      "Bash(/usr/libexec/PlistBuddy -c 'Print :NSAppleEventsUsageDescription' /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Debug/NotepadX.app/Contents/Info.plist)"
+      "Bash(/usr/libexec/PlistBuddy -c 'Print :NSAppleEventsUsageDescription' /Users/juhee/Library/Developer/Xcode/DerivedData/NotepadX-dvviaclsjpzigldocwgiyggkqdjc/Build/Products/Debug/NotepadX.app/Contents/Info.plist)",
+      "Bash(rm -f /tmp/keytest_snippet.txt /tmp/diag_test.swift *)"
     ]
   }
 }

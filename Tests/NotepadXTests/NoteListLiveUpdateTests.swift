@@ -36,7 +36,7 @@ final class NoteListLiveUpdateTests: XCTestCase {
 
         let created = try await noteUseCase.createNote(folderID: nil)
 
-        let noteList = NoteListViewModel(noteUseCase: noteUseCase, searchUseCase: searchUseCase)
+        let noteList = NoteListViewModel(noteUseCase: noteUseCase, tagUseCase: tagUseCase, searchUseCase: searchUseCase)
         await noteList.load(filter: .all)
         XCTAssertEqual(noteList.notes.first?.title, "")
 
@@ -58,9 +58,10 @@ final class NoteListLiveUpdateTests: XCTestCase {
         let index = SearchIndexService(db: db)
         let noteUseCase = NoteUseCase(noteRepository: noteRepo, searchIndex: index)
         let searchUseCase = SearchUseCase(searchIndex: index)
+        let tagUseCase = TagUseCase(tagRepository: SQLiteTagRepository(db: db), searchIndex: index)
 
         let existing = try await noteUseCase.createNote(folderID: nil)
-        let noteList = NoteListViewModel(noteUseCase: noteUseCase, searchUseCase: searchUseCase)
+        let noteList = NoteListViewModel(noteUseCase: noteUseCase, tagUseCase: tagUseCase, searchUseCase: searchUseCase)
         await noteList.load(filter: .all)
 
         let unrelated = Note(id: UUID(), folderID: nil, title: "다른 노트", documentJSON: Data(), plainText: "", contentHash: "x")

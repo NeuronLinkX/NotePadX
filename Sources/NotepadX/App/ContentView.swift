@@ -15,6 +15,7 @@ struct ContentView: View {
         )
         let noteList = NoteListViewModel(
             noteUseCase: environment.noteUseCase,
+            tagUseCase: environment.tagUseCase,
             searchUseCase: environment.searchUseCase
         )
         let workspaceViewModel = WorkspaceViewModel(
@@ -30,8 +31,9 @@ struct ContentView: View {
             noteList?.applyExternalUpdate(note)
             Task { await oneDrive.syncNoteIfConfigured(note.id) }
         }
-        // 편집기 안에서 태그를 붙이거나 새로 만들면 사이드바의 "태그" 목록도 바로 갱신한다 —
-        // 이 콜백이 없으면 사이드바는 다음 전체 재조회 전까지 새 태그를 보여주지 않는다.
+        // 편집기 안에서 태그를 붙이거나 새로 만들면, 또는 노트를 영구 삭제해서 태그가 자동
+        // 정리되면 사이드바의 "태그" 목록도 바로 갱신한다 — 이 콜백이 없으면 사이드바는 다음
+        // 전체 재조회 전까지 그 변화를 보여주지 않는다.
         let onTagsChanged: () -> Void = { [weak sidebar] in
             Task { await sidebar?.refreshTags() }
         }
@@ -39,6 +41,7 @@ struct ContentView: View {
         workspaceViewModel.secondaryEditor.onNoteUpdated = onSaved
         workspaceViewModel.primaryEditor.onTagsChanged = onTagsChanged
         workspaceViewModel.secondaryEditor.onTagsChanged = onTagsChanged
+        noteList.onTagsChanged = onTagsChanged
 
         _sidebarViewModel = StateObject(wrappedValue: sidebar)
         _noteListViewModel = StateObject(wrappedValue: noteList)
