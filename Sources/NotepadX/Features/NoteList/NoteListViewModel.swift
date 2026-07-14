@@ -10,12 +10,21 @@ final class NoteListViewModel: ObservableObject {
     @Published var searchResults: [SearchHit] = []
     @Published var searchFilters = SearchFilters()
 
+    /// 체크상자로 여러 메모를 골라 한꺼번에 삭제하는 모드.
+    @Published var isSelecting = false
+    @Published var checkedNoteIDs: Set<UUID> = []
+
+    /// 영구 삭제로 태그가 자동 정리됐을 때 사이드바가 즉시 반영하도록 ContentView가 연결한다.
+    var onTagsChanged: (() -> Void)?
+
     private let noteUseCase: NoteUseCase
+    private let tagUseCase: TagUseCase
     private let searchUseCase: SearchUseCase
     private var searchTask: Task<Void, Never>?
 
-    init(noteUseCase: NoteUseCase, searchUseCase: SearchUseCase) {
+    init(noteUseCase: NoteUseCase, tagUseCase: TagUseCase, searchUseCase: SearchUseCase) {
         self.noteUseCase = noteUseCase
+        self.tagUseCase = tagUseCase
         self.searchUseCase = searchUseCase
     }
 
@@ -34,6 +43,8 @@ final class NoteListViewModel: ObservableObject {
         } catch {
             report(error)
         }
+        isSelecting = false
+        checkedNoteIDs.removeAll()
     }
 
     @discardableResult
@@ -89,12 +100,89 @@ final class NoteListViewModel: ObservableObject {
     }
 
     func deletePermanently(_ note: Note) async {
-        do {
-            try await noteUseCase.deletePermanently(id: note.id)
-            notes.removeAll { $0.id == note.id }
-            if selectedNoteID == note.id { selectedNoteID = notes.first?.id }
-        } catch {
-            report(error)
+        await deleteNotesPermanentlyAndPruneOrphanedTags([note.id])
+    }
+
+    // MARK: - 선택 모드 (체크상자로 여러 개 한꺼번에 삭제)
+
+    func toggleSelectionMode() {
+        isSelecting.toggle()
+        if !isSelecting { checkedNoteIDs.removeAll() }
+    }
+
+    func toggleChecked(_ noteID: UUID) {
+        if checkedNoteIDs.contains(noteID) {
+            checkedNoteIDs.remove(noteID)
+        } else {
+            checkedNoteIDs.insert(noteID)
+        }
+    }
+
+    func selectAllVisible() {
+        checkedNoteIDs = Set(notes.map(\.id))
+    }
+
+    func deselectAll() {
+        checkedNoteIDs.removeAll()
+    }
+
+    /// 선택 모드에서 "삭제"를 눌렀을 때 호출한다. 휴지통 화면이면 영구 삭제(다 쓴 태그도 같이
+    /// 정리), 그 외 화면이면 휴지통으로 이동한다(복원할 수 있으니 태그는 그대로 둔다).
+    func deleteCheckedNotes(permanently: Bool) async {
+        let ids = checkedNoteIDs
+        guard !ids.isEmpty else { return }
+
+        if permanently {
+            await deleteNotesPermanentlyAndPruneOrphanedTags(ids)
+        } else {
+            for id in ids {
+                do {
+                    try await noteUseCase.moveToTrash(id: id)
+                } catch {
+                    report(error)
+                }
+            }
+            notes.removeAll { ids.contains($0.id) }
+            if let selectedNoteID, ids.contains(selectedNoteID) {
+                self.selectedNoteID = notes.first?.id
+            }
+        }
+
+        checkedNoteIDs.removeAll()
+        isSelecting = false
+    }
+
+    /// 노트를 영구 삭제하고, 그 노트들에만 붙어 있어서 이제 어떤 노트에도 안 쓰이는 태그를
+    /// 자동으로 지운다. 휴지통 이동(소프트 삭제)에서는 이 정리를 하지 않는다 — 나중에 복원하면
+    /// 태그도 같이 돌아와야 하는데, 여기서 태그를 지워버리면 복원 후 태그가 사라진 것처럼 보인다.
+    private func deleteNotesPermanentlyAndPruneOrphanedTags(_ ids: Set<UUID>) async {
+        var candidateTagIDs = Set<UUID>()
+        for id in ids {
+            if let tags = try? await tagUseCase.tags(forNote: id) {
+                candidateTagIDs.formUnion(tags.map(\.id))
+            }
+        }
+
+        for id in ids {
+            do {
+                try await noteUseCase.deletePermanently(id: id)
+            } catch {
+                report(error)
+            }
+        }
+        notes.removeAll { ids.contains($0.id) }
+        if let selectedNoteID, ids.contains(selectedNoteID) {
+            self.selectedNoteID = notes.first?.id
+        }
+
+        var didPruneAnyTag = false
+        for tagID in candidateTagIDs {
+            guard let count = try? await tagUseCase.noteCount(tagID: tagID), count == 0 else { continue }
+            try? await tagUseCase.delete(id: tagID)
+            didPruneAnyTag = true
+        }
+        if didPruneAnyTag {
+            onTagsChanged?()
         }
     }
 

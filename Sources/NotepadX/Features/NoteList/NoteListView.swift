@@ -6,6 +6,8 @@ struct NoteListView: View {
     let currentFolderID: UUID?
     let availableTags: [Tag]
 
+    @State private var isShowingBulkDeleteConfirm = false
+
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -24,23 +26,54 @@ struct NoteListView: View {
         .navigationTitle(viewModel.isSearching ? "검색 결과" : selection.title)
         .searchable(text: $viewModel.searchQuery, placement: .toolbar, prompt: "제목, 본문, 코드, 태그 검색")
         .toolbar {
-            ToolbarItem {
-                filterMenu
-            }
-            ToolbarItem {
-                Button {
-                    Task { await viewModel.createNote(folderID: currentFolderID) }
-                } label: {
-                    Label("새 메모", systemImage: "square.and.pencil")
+            if viewModel.isSelecting {
+                selectionToolbarContent
+            } else {
+                ToolbarItem {
+                    filterMenu
                 }
-                .disabled(selection == .trash)
+                ToolbarItem {
+                    Button {
+                        viewModel.toggleSelectionMode()
+                    } label: {
+                        Label("여러 개 선택", systemImage: "checkmark.circle")
+                    }
+                    .disabled(viewModel.notes.isEmpty || viewModel.isSearching)
+                }
+                ToolbarItem {
+                    Button {
+                        Task { await viewModel.createNote(folderID: currentFolderID) }
+                    } label: {
+                        Label("새 메모", systemImage: "square.and.pencil")
+                    }
+                    .disabled(selection == .trash)
+                }
             }
         }
         .task(id: selection) {
             await viewModel.load(filter: selection.noteListFilter)
         }
-        .onChange(of: viewModel.searchQuery) { _, _ in viewModel.performSearch() }
+        .onChange(of: viewModel.searchQuery) { _, _ in
+            viewModel.performSearch()
+            if viewModel.isSelecting { viewModel.toggleSelectionMode() }
+        }
         .onChange(of: viewModel.searchFilters) { _, _ in viewModel.performSearch() }
+        .confirmationDialog(
+            selection == .trash
+                ? "\(viewModel.checkedNoteIDs.count)개를 완전히 삭제할까요?"
+                : "\(viewModel.checkedNoteIDs.count)개를 휴지통으로 이동할까요?",
+            isPresented: $isShowingBulkDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(selection == .trash ? "완전히 삭제" : "휴지통으로 이동", role: .destructive) {
+                Task { await viewModel.deleteCheckedNotes(permanently: selection == .trash) }
+            }
+            Button("취소", role: .cancel) {}
+        } message: {
+            if selection == .trash {
+                Text("완전히 삭제하면 되돌릴 수 없습니다. 이 메모에만 붙어 있던 태그도 함께 정리됩니다.")
+            }
+        }
         .alert("오류", isPresented: Binding(
             get: { viewModel.errorMessage != nil },
             set: { if !$0 { viewModel.errorMessage = nil } }
@@ -51,10 +84,43 @@ struct NoteListView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var selectionToolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("취소") { viewModel.toggleSelectionMode() }
+        }
+        ToolbarItem {
+            Button(viewModel.checkedNoteIDs.count == viewModel.notes.count ? "선택 해제" : "전체 선택") {
+                if viewModel.checkedNoteIDs.count == viewModel.notes.count {
+                    viewModel.deselectAll()
+                } else {
+                    viewModel.selectAllVisible()
+                }
+            }
+        }
+        ToolbarItem {
+            Button(role: .destructive) {
+                isShowingBulkDeleteConfirm = true
+            } label: {
+                Label(
+                    viewModel.checkedNoteIDs.isEmpty
+                        ? (selection == .trash ? "완전히 삭제" : "삭제")
+                        : "\(selection == .trash ? "완전히 삭제" : "삭제") (\(viewModel.checkedNoteIDs.count))",
+                    systemImage: "trash"
+                )
+            }
+            .disabled(viewModel.checkedNoteIDs.isEmpty)
+        }
+    }
+
     private var noteList: some View {
         List(selection: $viewModel.selectedNoteID) {
             ForEach(viewModel.notes) { note in
-                row(for: note).tag(note.id)
+                if viewModel.isSelecting {
+                    row(for: note)
+                } else {
+                    row(for: note).tag(note.id)
+                }
             }
         }
         .listStyle(.inset)
@@ -111,44 +177,60 @@ struct NoteListView: View {
 
     @ViewBuilder
     private func row(for note: Note) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(note.displayTitle)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer()
-                if note.isFavorite {
-                    Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
-                        .font(.caption)
-                }
+        let isChecked = viewModel.checkedNoteIDs.contains(note.id)
+        let content = HStack(alignment: .top, spacing: 8) {
+            if viewModel.isSelecting {
+                Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isChecked ? Color.accentColor : Color.secondary)
+                    .font(.system(size: 16))
+                    .padding(.top, 2)
+                    .accessibilityLabel(isChecked ? "선택됨" : "선택 안 됨")
             }
-            Text(note.previewText.isEmpty ? "추가 텍스트 없음" : note.previewText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            HStack {
-                Text(Self.dateFormatter.string(from: note.updatedAt))
-                if selection == .trash, let deletedAt = note.deletedAt {
-                    Text("· \(daysUntilPurge(deletedAt))일 후 자동 삭제")
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(note.displayTitle)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Spacer()
+                    if note.isFavorite {
+                        Image(systemName: "star.fill")
+                            .foregroundStyle(.yellow)
+                            .font(.caption)
+                    }
                 }
+                Text(note.previewText.isEmpty ? "추가 텍스트 없음" : note.previewText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                HStack {
+                    Text(Self.dateFormatter.string(from: note.updatedAt))
+                    if selection == .trash, let deletedAt = note.deletedAt {
+                        Text("· \(daysUntilPurge(deletedAt))일 후 자동 삭제")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             }
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
-        .contextMenu {
-            if selection == .trash {
-                Button("복원") { Task { await viewModel.restore(note) } }
-                Button("지금 완전히 삭제", role: .destructive) {
-                    Task { await viewModel.deletePermanently(note) }
-                }
-            } else {
-                Button(note.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가") {
-                    Task { await viewModel.toggleFavorite(note) }
-                }
-                Button("휴지통으로 이동", role: .destructive) {
-                    Task { await viewModel.moveToTrash(note) }
+        .contentShape(Rectangle())
+
+        if viewModel.isSelecting {
+            content.onTapGesture { viewModel.toggleChecked(note.id) }
+        } else {
+            content.contextMenu {
+                if selection == .trash {
+                    Button("복원") { Task { await viewModel.restore(note) } }
+                    Button("지금 완전히 삭제", role: .destructive) {
+                        Task { await viewModel.deletePermanently(note) }
+                    }
+                } else {
+                    Button(note.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가") {
+                        Task { await viewModel.toggleFavorite(note) }
+                    }
+                    Button("휴지통으로 이동", role: .destructive) {
+                        Task { await viewModel.moveToTrash(note) }
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-import { Extension, Node, mergeAttributes } from "@tiptap/core";
+import { Extension, InputRule, Node, mergeAttributes } from "@tiptap/core";
 
 // 공식 Color/FontFamily 확장과 같은 방식으로 textStyle 마크에 fontSize 속성을 얹는다.
 // 별도 마크 타입을 새로 만들지 않아 문서에는 { type: "textStyle", attrs: { fontSize, color, fontFamily } }
@@ -115,6 +115,27 @@ export const FileAttachment = Node.create({
       "div",
       mergeAttributes(HTMLAttributes, { "data-file-attachment": "", class: "nx-file-attachment" }),
       `\u{1F4CE} ${node.attrs.fileName || "첨부파일"}`,
+    ];
+  },
+});
+
+// "-->"/"<--"를 입력하면 화살표 문자로 바로 바뀐다. Tiptap 공식 Typography 확장 전체를
+// 들여오는 대신, 요청받은 화살표 규칙만 InputRule로 직접 만든다.
+function arrowRule(find, replacement) {
+  return new InputRule({
+    find,
+    handler: ({ state, range }) => {
+      state.tr.insertText(replacement, range.from, range.to);
+    },
+  });
+}
+
+export const ArrowTypography = Extension.create({
+  name: "arrowTypography",
+  addInputRules() {
+    return [
+      arrowRule(/-->$/, "→"),
+      arrowRule(/<--$/, "←"),
     ];
   },
 });

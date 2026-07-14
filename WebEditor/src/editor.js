@@ -19,7 +19,7 @@ import ImageExtension from "@tiptap/extension-image";
 
 import { lowlight } from "./languages.js";
 import { sanitizePastedHTML } from "./sanitize.js";
-import { FontSize, Details, DetailsSummary, DetailsContent, FileAttachment } from "./extensions.js";
+import { FontSize, Details, DetailsSummary, DetailsContent, FileAttachment, ArrowTypography } from "./extensions.js";
 
 // ---------------------------------------------------------------------------
 // Swift 브리지: 허용된 메시지 이름만 window.webkit.messageHandlers로 보낸다.
@@ -44,6 +44,36 @@ const ACTIVE_BLOCKS = [
   "paragraph", "heading", "bulletList", "orderedList", "taskList",
   "blockquote", "codeBlock", "table", "details", "horizontalRule",
 ];
+
+// 이미지 붙여넣기. 앱이 완전히 오프라인이고 문서(JSON) 하나가 곧 노트 전체이므로, 별도
+// 첨부파일 저장소/URL 스킴 없이 base64 data URI로 문서 안에 그대로 끼워 넣는다 — 그래야
+// 내보내기·복사·복원까지 항상 문서 JSON만 옮기면 이미지도 같이 따라간다. index.html의
+// CSP(img-src 'self' data:)도 이 방식을 전제로 이미 열어 두었다.
+const MAX_PASTED_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function insertImageFiles(files) {
+  const imageFiles = Array.from(files).filter(file => file.type.startsWith("image/"));
+  if (imageFiles.length === 0) return false;
+  imageFiles.forEach(file => {
+    if (file.size > MAX_PASTED_IMAGE_BYTES) {
+      postToNative("error", {
+        message: `이미지가 너무 큽니다 (${Math.round(file.size / 1024 / 1024)}MB). 10MB 이하 이미지만 붙여넣을 수 있습니다.`,
+      });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        editor.chain().focus().setImage({ src: reader.result }).run();
+      }
+    };
+    reader.onerror = () => {
+      postToNative("error", { message: "이미지를 붙여넣는 중 오류가 발생했습니다." });
+    };
+    reader.readAsDataURL(file);
+  });
+  return true;
+}
 
 let updateTimer = null;
 function scheduleDocChanged() {
@@ -109,6 +139,7 @@ const extensions = [
   DetailsSummary,
   DetailsContent,
   FileAttachment,
+  ArrowTypography,
 ];
 
 const editor = new Editor({
@@ -118,6 +149,14 @@ const editor = new Editor({
   autofocus: false,
   editorProps: {
     transformPastedHTML: sanitizePastedHTML,
+    handlePaste(_view, event) {
+      const files = event.clipboardData && event.clipboardData.files;
+      if (files && files.length > 0 && insertImageFiles(files)) {
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    },
     handleClickOn(_view, _pos, _node, _nodePos, event) {
       const target = event.target && event.target.closest ? event.target.closest("a[href]") : null;
       if (target) {
