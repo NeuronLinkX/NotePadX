@@ -139,3 +139,116 @@ export const ArrowTypography = Extension.create({
     ];
   },
 });
+
+// 공식 @tiptap/extension-image를 그대로 쓰지 않고 이름이 같은("image") 커스텀 노드로
+// 대체한다 — 이유 두 가지:
+//   1) 공식 확장은 allowBase64가 기본 false라서, 이미 삽입된 이미지를 복사해서 다시
+//      붙여넣으면(HTML 붙여넣기 경로) data: URI가 거부되어 아예 안 붙는 문제가 있었다.
+//   2) 크기 조절 손잡이(모서리 드래그)를 넣으려면 NodeView가 필요한데, 공식 확장은
+//      NodeView 없이 <img> 태그만 그린다.
+// width 속성은 문서 JSON에 그대로 저장되고(EditorNode.attrs가 임의 값을 보존하므로 Swift
+// 쪽 변경 없이 왕복된다), 지정돼 있으면 그 크기로, 없으면 CSS 기본값(최대 480px)으로 보인다.
+export const ResizableImage = Node.create({
+  name: "image",
+  group: "block",
+  draggable: true,
+  addOptions() {
+    return { allowBase64: true, HTMLAttributes: {} };
+  },
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: null },
+      title: { default: null },
+      width: {
+        default: null,
+        parseHTML: element => {
+          const value = element.style.width || element.getAttribute("width");
+          return value ? Math.round(parseFloat(value)) : null;
+        },
+        renderHTML: attrs => (attrs.width ? { style: `width: ${attrs.width}px` } : {}),
+      },
+    };
+  },
+  parseHTML() {
+    return [{
+      tag: this.options.allowBase64 ? "img[src]" : 'img[src]:not([src^="data:"])',
+    }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ["img", mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
+  },
+  addCommands() {
+    return {
+      setImage: options => ({ commands }) => commands.insertContent({ type: this.name, attrs: options }),
+    };
+  },
+  addNodeView() {
+    return ({ node, editor, getPos }) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "nx-image-wrapper";
+      if (node.attrs.width) {
+        wrapper.style.width = `${node.attrs.width}px`;
+        wrapper.classList.add("nx-image-resized");
+      }
+
+      const img = document.createElement("img");
+      img.src = node.attrs.src || "";
+      if (node.attrs.alt) img.alt = node.attrs.alt;
+      if (node.attrs.title) img.title = node.attrs.title;
+      wrapper.appendChild(img);
+
+      const handle = document.createElement("span");
+      handle.className = "nx-image-resize-handle";
+      handle.contentEditable = "false";
+      wrapper.appendChild(handle);
+
+      let startX = 0;
+      let startWidth = 0;
+
+      function commitWidth(width) {
+        if (typeof getPos !== "function") return;
+        const pos = getPos();
+        if (typeof pos !== "number") return;
+        const tr = editor.view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, width });
+        editor.view.dispatch(tr);
+      }
+
+      function onPointerMove(event) {
+        const delta = event.clientX - startX;
+        // 편집기 폭보다 커지면 다시 가로 스크롤 버그가 재발하니, 감싸는 요소 폭으로 상한을 둔다.
+        const maxWidth = wrapper.parentElement ? wrapper.parentElement.clientWidth : 4000;
+        const newWidth = Math.min(maxWidth, Math.max(60, Math.round(startWidth + delta)));
+        wrapper.style.width = `${newWidth}px`;
+        wrapper.classList.add("nx-image-resized");
+      }
+
+      function onPointerUp() {
+        document.removeEventListener("pointermove", onPointerMove);
+        document.removeEventListener("pointerup", onPointerUp);
+        commitWidth(Math.round(wrapper.getBoundingClientRect().width));
+      }
+
+      handle.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        startX = event.clientX;
+        startWidth = wrapper.getBoundingClientRect().width;
+        document.addEventListener("pointermove", onPointerMove);
+        document.addEventListener("pointerup", onPointerUp);
+      });
+
+      return {
+        dom: wrapper,
+        update: updatedNode => {
+          if (updatedNode.type.name !== "image") return false;
+          if (updatedNode.attrs.src !== node.attrs.src) img.src = updatedNode.attrs.src || "";
+          wrapper.style.width = updatedNode.attrs.width ? `${updatedNode.attrs.width}px` : "";
+          wrapper.classList.toggle("nx-image-resized", !!updatedNode.attrs.width);
+          node = updatedNode;
+          return true;
+        },
+      };
+    };
+  },
+});
