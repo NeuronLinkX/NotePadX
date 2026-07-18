@@ -15,11 +15,10 @@ import TableCell from "@tiptap/extension-table-cell";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
-import ImageExtension from "@tiptap/extension-image";
 
 import { lowlight } from "./languages.js";
 import { sanitizePastedHTML } from "./sanitize.js";
-import { FontSize, Details, DetailsSummary, DetailsContent, FileAttachment, ArrowTypography } from "./extensions.js";
+import { FontSize, Details, DetailsSummary, DetailsContent, FileAttachment, ArrowTypography, ResizableImage } from "./extensions.js";
 
 // ---------------------------------------------------------------------------
 // Swift 브리지: 허용된 메시지 이름만 window.webkit.messageHandlers로 보낸다.
@@ -45,13 +44,49 @@ const ACTIVE_BLOCKS = [
   "blockquote", "codeBlock", "table", "details", "horizontalRule",
 ];
 
-// 이미지 붙여넣기. 앱이 완전히 오프라인이고 문서(JSON) 하나가 곧 노트 전체이므로, 별도
-// 첨부파일 저장소/URL 스킴 없이 base64 data URI로 문서 안에 그대로 끼워 넣는다 — 그래야
+// 이미지 붙여넣기/드래그앤드롭. 앱이 완전히 오프라인이고 문서(JSON) 하나가 곧 노트 전체이므로,
+// 별도 첨부파일 저장소/URL 스킴 없이 base64 data URI로 문서 안에 그대로 끼워 넣는다 — 그래야
 // 내보내기·복사·복원까지 항상 문서 JSON만 옮기면 이미지도 같이 따라간다. index.html의
 // CSP(img-src 'self' data:)도 이 방식을 전제로 이미 열어 두었다.
 const MAX_PASTED_IMAGE_BYTES = 10 * 1024 * 1024;
 
-function insertImageFiles(files) {
+// 큰 사진(요즘 카메라 사진은 흔히 몇 MB)을 원본 바이트 그대로 문서 JSON에 박아 넣으면, 편집할
+// 때마다(scheduleDocChanged) 그 몇 MB짜리 base64 문자열 전체를 WKWebView의 JS→Swift
+// postMessage 브리지로 매번 다시 보내야 한다. WKScriptMessageHandler는 이런 대용량 단일
+// 문자열 페이로드 직렬화에 매우 취약해서(WebContent 프로세스가 그동안 멈춘 것처럼 보임),
+// 사진을 붙여넣거나 끌어놓는 순간 앱 전체가 다운된 것처럼 멈추는 원인이었다.
+// 화면 표시 크기(픽셀 해상도)는 그대로 유지하되(사용자가 원본 화질을 기대하므로), 이 임계값을
+// 넘는 파일만 canvas로 JPEG 재인코딩해서 전송되는 바이트 수 자체를 줄인다.
+const REENCODE_THRESHOLD_BYTES = 1.5 * 1024 * 1024;
+const REENCODE_JPEG_QUALITY = 0.82;
+
+function loadImageElement(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("이미지를 디코딩할 수 없습니다."));
+    img.src = dataUrl;
+  });
+}
+
+async function reencodeIfLarge(dataUrl, byteSize) {
+  if (byteSize <= REENCODE_THRESHOLD_BYTES) return dataUrl;
+  const img = await loadImageElement(dataUrl);
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext("2d");
+  // JPEG는 알파 채널이 없어서, 투명 배경이 있는 원본(PNG 스크린샷 등)을 그대로 그리면
+  // 캔버스 기본값인 검정 배경이 비쳐 보인다 — 흰 배경을 먼저 깔아 둔다.
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0);
+  return canvas.toDataURL("image/jpeg", REENCODE_JPEG_QUALITY);
+}
+
+/// pos가 주어지면 그 위치에 삽입한다(드래그앤드롭이 놓인 지점) — 없으면 현재 커서 위치에
+/// 삽입한다(붙여넣기).
+function insertImageFiles(files, pos) {
   const imageFiles = Array.from(files).filter(file => file.type.startsWith("image/"));
   if (imageFiles.length === 0) return false;
   imageFiles.forEach(file => {
@@ -62,10 +97,18 @@ function insertImageFiles(files) {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        editor.chain().focus().setImage({ src: reader.result }).run();
+    reader.onload = async () => {
+      if (typeof reader.result !== "string") return;
+      let src = reader.result;
+      try {
+        src = await reencodeIfLarge(src, file.size);
+      } catch {
+        postToNative("error", { message: "이미지를 처리하는 중 오류가 발생했습니다." });
+        return;
       }
+      const chain = editor.chain().focus();
+      if (typeof pos === "number") chain.setTextSelection(pos);
+      chain.setImage({ src }).run();
     };
     reader.onerror = () => {
       postToNative("error", { message: "이미지를 붙여넣는 중 오류가 발생했습니다." });
@@ -134,7 +177,7 @@ const extensions = [
   TaskList,
   TaskItem.configure({ nested: true }),
   CodeBlockLowlight.configure({ lowlight, defaultLanguage: "plaintext" }),
-  ImageExtension,
+  ResizableImage,
   Details,
   DetailsSummary,
   DetailsContent,
@@ -152,6 +195,16 @@ const editor = new Editor({
     handlePaste(_view, event) {
       const files = event.clipboardData && event.clipboardData.files;
       if (files && files.length > 0 && insertImageFiles(files)) {
+        event.preventDefault();
+        return true;
+      }
+      return false;
+    },
+    handleDrop(view, event) {
+      const files = event.dataTransfer && event.dataTransfer.files;
+      if (!files || files.length === 0) return false;
+      const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (insertImageFiles(files, coords ? coords.pos : undefined)) {
         event.preventDefault();
         return true;
       }

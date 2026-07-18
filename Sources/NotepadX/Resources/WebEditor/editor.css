@@ -225,7 +225,55 @@ code {
   font-size: 0.9em;
 }
 
-.ProseMirror img { max-width: 100%; border-radius: 6px; }
+/* max-width: 100%만 있으면 붙여넣은 원본 해상도 사진(흔히 3000px 이상)이 패널 너비를
+   가득 채워버려서 편집기가 이미지 하나로 꽉 차고 다른 내용을 보려면 한참 스크롤해야 했다.
+   Notes/Notion처럼 적당한 미리보기 크기로 기본 제한해 두고(width 속성이 없을 때만),
+   오른쪽 아래 손잡이로 드래그하면 그보다 크게도/작게도 조절할 수 있다(ResizableImage
+   NodeView, WebEditor/src/extensions.js). 실제 원본 데이터는 항상 그대로 저장된다. */
+.nx-image-wrapper {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0.4em 0;
+}
+.nx-image-wrapper img {
+  display: block;
+  max-width: min(100%, 480px);
+  max-height: 480px;
+  border-radius: 6px;
+  pointer-events: none; /* 드래그 이동/클릭 선택은 wrapper가, 크기 조절은 손잡이가 담당 */
+}
+/* 손잡이로 직접 크기를 지정한 경우(nx-image-resized 클래스, extensions.js에서 토글)에는
+   480px 상한을 더 이상 적용하지 않는다 — 사용자가 일부러 더 크게 늘린 것이므로 존중한다.
+   wrapper의 인라인 width(JS가 직접 설정)가 최종 폭이고, img는 그 폭을 채우기만 한다. */
+.nx-image-wrapper.nx-image-resized img {
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+}
+.nx-image-resize-handle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--nx-link);
+  border: 2px solid var(--nx-bg);
+  box-shadow: 0 0 0 1px var(--nx-border);
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.nx-image-wrapper:hover .nx-image-resize-handle,
+.nx-image-wrapper.ProseMirror-selectednode .nx-image-resize-handle {
+  opacity: 1;
+}
+.nx-image-wrapper.ProseMirror-selectednode img {
+  outline: 2px solid var(--nx-link);
+  outline-offset: 2px;
+}
 
 .ProseMirror .is-editor-empty:first-child::before {
   content: attr(data-placeholder);

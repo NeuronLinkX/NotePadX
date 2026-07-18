@@ -8,7 +8,13 @@ const BLOCKED_TAGS = new Set([
   "AUDIO", "VIDEO", "SOURCE", "TRACK", "NOSCRIPT",
 ]);
 
-const DANGEROUS_URL_SCHEME = /^\s*(javascript|data|vbscript):/i;
+const DANGEROUS_URL_SCHEME = /^\s*(javascript|vbscript):/i;
+// data: 자체를 통째로 막으면 이미지를 붙여넣기(handlePaste)가 아니라 일반 HTML 붙여넣기
+// 경로로 다시 들어오는 경우(예: 이미 삽입된 이미지를 복사해서 같은 문서/다른 노트에 다시
+// 붙여넣기)에 우리 자신이 base64로 저장한 이미지까지 통째로 걸러져서 조용히 사라졌다.
+// data:image/*는 브라우저가 스크립트로 해석하지 않는 순수 바이너리라 안전하다 — 실행 가능한
+// data:text/html, data:application/* 같은 스킴만 계속 막는다.
+const DANGEROUS_DATA_URI = /^\s*data:(?!image\/)/i;
 
 function sanitizeElement(element) {
   const toRemove = [];
@@ -24,7 +30,8 @@ function sanitizeElement(element) {
         node.removeAttribute(attr.name);
         continue;
       }
-      if ((name === "href" || name === "src" || name === "xlink:href") && DANGEROUS_URL_SCHEME.test(attr.value)) {
+      if ((name === "href" || name === "src" || name === "xlink:href") &&
+          (DANGEROUS_URL_SCHEME.test(attr.value) || DANGEROUS_DATA_URI.test(attr.value))) {
         node.removeAttribute(attr.name);
       }
       if (name === "style") {
