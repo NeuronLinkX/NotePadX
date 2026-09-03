@@ -45,5 +45,21 @@
             </array>
         </dict>
     </array>
+    <!-- 메모 목록 → 사이드바 폴더 드래그 앤 드롭용 앱 전용 타입. 실제 드래그 세션은
+         프로세스 안에서도 시스템 pasteboard 서버를 거치므로, 코드에서 UTType(exportedAs:)로
+         즉석에서 만드는 것만으로는 부족하고 여기 Info.plist에도 정식으로 선언해야 한다. -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.notepadx.app.note-id-list</string>
+            <key>UTTypeDescription</key>
+            <string>NotepadX Note ID List</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

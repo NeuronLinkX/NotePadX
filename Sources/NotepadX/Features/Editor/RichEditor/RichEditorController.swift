@@ -19,6 +19,13 @@ final class RichEditorController: NSObject {
         let contentController = WKUserContentController()
         configuration.userContentController = contentController
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        // 문서 상태는 전부 Swift/SQLite가 갖고 있고 WKWebView는 순수 렌더링 엔진일 뿐이라
+        // 쿠키·localStorage·디스크 캐시를 프로세스 사이에 보존할 이유가 없다. 기본(영구)
+        // 데이터 스토어를 쓰면 file:// 하위 리소스(editor.bundle.js 등)가 WebKit의 디스크
+        // 네트워크 캐시에 남아서, 앱을 재설치해 같은 경로에 새 파일을 깔아도 이전 빌드의
+        // 스크립트가 그대로 로드되는 경우가 있었다 — 매 실행마다 새 임시 스토어를 쓰면
+        // 원천적으로 재발하지 않는다.
+        configuration.websiteDataStore = .nonPersistent()
 
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()

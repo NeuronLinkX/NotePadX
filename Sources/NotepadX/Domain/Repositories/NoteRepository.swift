@@ -32,4 +32,7 @@ protocol NoteRepository: Sendable {
     /// 휴지통에서 사용자가 명시적으로 "지금 완전히 삭제"를 선택했을 때 호출한다.
     func deleteNotePermanently(id: UUID) async throws
     func setFavorite(id: UUID, isFavorite: Bool) async throws
+    /// 메모 목록에서 사이드바 폴더로 드래그 앤 드롭했을 때 호출한다. `nil`은 "폴더 없음"으로
+    /// 옮긴다는 뜻이다.
+    func moveNote(id: UUID, toFolderID folderID: UUID?) async throws
 }

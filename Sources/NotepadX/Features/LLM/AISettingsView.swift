@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 설정 > AI 탭 (스펙 16절). API 키는 앱 안에서 입력받거나 저장하지 않는다 — 오직
-/// `OPENAI_API_KEY` 환경 변수를 읽기만 하는 읽기 전용 상태 표시다.
+/// 설정 > AI 탭 (스펙 16절). API 키는 여기서 입력받아 Keychain에 등록해 고정하거나
+/// (`OPENAI_API_KEY` 환경 변수는 그 값이 없을 때만 쓰는 폴백이다), 등록된 값을 지울 수 있다.
 struct AISettingsView: View {
     @ObservedObject var viewModel: AISettingsViewModel
 
@@ -25,23 +25,33 @@ struct AISettingsView: View {
                         Text(viewModel.maskedKey ?? "설정됨")
                             .font(.system(.body, design: .monospaced))
                         Spacer()
-                        Label("환경 변수로 등록됨", systemImage: "checkmark.circle.fill")
+                        Label(
+                            viewModel.apiKeySource == .keychain ? "Keychain에 고정됨" : "환경 변수로 등록됨",
+                            systemImage: viewModel.apiKeySource == .keychain ? "lock.fill" : "checkmark.circle.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                    }
+                    if viewModel.apiKeySource == .keychain {
+                        Text("한 번 등록해 두면 앱을 다시 실행하거나 로그아웃해도 초기화되지 않습니다.")
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(.secondary)
+                        Button("키 삭제", role: .destructive) { viewModel.clearStoredAPIKey() }
+                    } else {
+                        Text("환경 변수는 재부팅하거나 로그아웃하면 사라질 수 있습니다. 아래에서 한 번 등록해 두면 계속 초기화하지 않아도 됩니다.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        apiKeyRegistrationField
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 6) {
-                        Label("환경 변수가 등록되어 있지 않습니다", systemImage: "exclamationmark.triangle.fill")
+                        Label("등록된 API 키가 없습니다", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
-                        Text("터미널에서 아래처럼 \(AISettingsViewModel.environmentVariableName)을 등록하고 앱을 다시 시작하세요.")
+                        Text("아래에 키를 입력하고 등록하면 Keychain에 안전하게 고정되어, 다시 설정할 필요가 없습니다.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text("export \(AISettingsViewModel.environmentVariableName)=\"sk-...\"")
-                            .font(.system(.caption, design: .monospaced))
-                            .padding(6)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(.quaternary))
                     }
+                    apiKeyRegistrationField
                 }
             }
 
@@ -99,7 +109,7 @@ struct AISettingsView: View {
                     }
                 }
                 if !viewModel.hasAPIKey {
-                    Text("연결 테스트를 하려면 먼저 \(AISettingsViewModel.environmentVariableName) 환경 변수를 등록하세요.")
+                    Text("연결 테스트를 하려면 먼저 위에서 API 키를 등록하세요.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -115,6 +125,18 @@ struct AISettingsView: View {
             Button("확인", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    /// 물리적인 "등록" 버튼 — 여기서 누른 값만 Keychain에 고정되고, 지우기 전까지는
+    /// 다시 바뀌지 않는다.
+    private var apiKeyRegistrationField: some View {
+        HStack {
+            SecureField("sk-...", text: $viewModel.apiKeyInput)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { viewModel.registerAPIKey() }
+            Button("키 등록") { viewModel.registerAPIKey() }
+                .disabled(viewModel.apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 }

@@ -5,8 +5,11 @@ import Foundation
 protocol EditorBridgeDelegate: AnyObject {
     func editorBridgeDidBecomeReady(_ bridge: EditorBridge)
     func editorBridge(_ bridge: EditorBridge, didChangeDocument document: EditorDocument, plainText: String)
+    func editorBridge(_ bridge: EditorBridge, didChangeHeadings headings: [HeadingOutlineItem])
     func editorBridge(_ bridge: EditorBridge, didChangeSelection selection: EditorSelectionState)
     func editorBridge(_ bridge: EditorBridge, didRequestOpenExternalLink url: URL)
+    func editorBridge(_ bridge: EditorBridge, didRequestSaveAttachment payload: SaveAttachmentPayload)
+    func editorBridge(_ bridge: EditorBridge, didRequestOpenAttachment payload: OpenAttachmentPayload)
     func editorBridge(_ bridge: EditorBridge, didReportError message: String)
 }
 
@@ -54,6 +57,13 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
             }
             delegate?.editorBridge(self, didChangeDocument: payload.document, plainText: payload.plainText)
 
+        case .headingsChanged:
+            guard let payload = try? JSONDecoder().decode(HeadingsChangedPayload.self, from: payloadData) else {
+                delegate?.editorBridge(self, didReportError: "Failed to decode headingsChanged payload")
+                return
+            }
+            delegate?.editorBridge(self, didChangeHeadings: payload.headings)
+
         case .selectionChanged:
             guard let payload = try? JSONDecoder().decode(EditorSelectionState.self, from: payloadData) else {
                 delegate?.editorBridge(self, didReportError: "Failed to decode selectionChanged payload")
@@ -70,6 +80,20 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
                 return
             }
             delegate?.editorBridge(self, didRequestOpenExternalLink: url)
+
+        case .saveAttachment:
+            guard let payload = try? JSONDecoder().decode(SaveAttachmentPayload.self, from: payloadData) else {
+                delegate?.editorBridge(self, didReportError: "Failed to decode saveAttachment payload")
+                return
+            }
+            delegate?.editorBridge(self, didRequestSaveAttachment: payload)
+
+        case .openAttachment:
+            guard let payload = try? JSONDecoder().decode(OpenAttachmentPayload.self, from: payloadData) else {
+                delegate?.editorBridge(self, didReportError: "Failed to decode openAttachment payload")
+                return
+            }
+            delegate?.editorBridge(self, didRequestOpenAttachment: payload)
 
         case .error:
             let message = (try? JSONDecoder().decode(BridgeErrorPayload.self, from: payloadData))?.message ?? "unknown error"

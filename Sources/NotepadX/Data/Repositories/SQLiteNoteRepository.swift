@@ -191,4 +191,11 @@ struct SQLiteNoteRepository: NoteRepository {
             [.int(isFavorite ? 1 : 0), .text(id.uuidString)]
         )
     }
+
+    func moveNote(id: UUID, toFolderID folderID: UUID?) async throws {
+        try await db.execute(
+            "UPDATE note SET folder_id = ? WHERE id = ?;",
+            [folderID.map { .text($0.uuidString) } ?? .null, .text(id.uuidString)]
+        )
+    }
 }
