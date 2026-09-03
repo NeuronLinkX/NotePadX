@@ -14,6 +14,7 @@ final class LLMPanelViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var lastAppliedAction: AIApplyAction?
     @Published var isShowingMissingKeyWarning = false
+    @Published var isShowingBillingAlert = false
 
     private let llmUseCase: LLMUseCase
     private let editorViewModel: EditorViewModel
@@ -86,13 +87,26 @@ final class LLMPanelViewModel: ObservableObject {
                 } catch is CancellationError {
                     // 사용자가 중지를 누른 경우 — 오류로 표시하지 않는다.
                 } catch {
-                    self.errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    self.report(error)
                 }
                 self.isStreaming = false
             }
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            report(error)
         }
+    }
+
+    /// 크레딧 소진(billing) 오류는 "잠시 후 재시도"로 해결되지 않으므로, 인라인 빨간 텍스트
+    /// 말고 놓치기 어려운 경고창으로 따로 띄운다.
+    private func report(_ error: Error) {
+        if case AIClientError.billingRequired = error {
+            isShowingBillingAlert = true
+        }
+        errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    func openBillingPage() {
+        NSWorkspace.shared.open(URL(string: "https://platform.openai.com/settings/organization/billing/overview")!)
     }
 
     func stop() {

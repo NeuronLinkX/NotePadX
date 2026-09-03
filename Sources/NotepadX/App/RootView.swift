@@ -25,7 +25,7 @@ struct RootView: View {
         .alert("OpenAI API 키가 없습니다", isPresented: $isShowingMissingAPIKeyWarning) {
             Button("확인", role: .cancel) {}
         } message: {
-            Text("AI 기능을 쓰려면 \(LLMUseCase.environmentVariableName) 환경 변수를 등록한 뒤 앱을 다시 시작하세요.")
+            Text("AI 기능을 쓰려면 설정 > AI 탭에서 키를 한 번 등록하세요. 등록하면 계속 유지됩니다.")
         }
     }
 
@@ -35,7 +35,7 @@ struct RootView: View {
             do {
                 let bootstrapped = try await AppEnvironment.bootstrap()
                 environment = bootstrapped
-                // 스펙: OPENAI_API_KEY 환경 변수가 없으면 최초 진입 시 한 번 알린다.
+                // 스펙: 등록된 API 키(Keychain, 없으면 OPENAI_API_KEY 환경 변수)가 없으면 최초 진입 시 한 번 알린다.
                 isShowingMissingAPIKeyWarning = !LLMUseCase().hasAPIKey()
             } catch let error as AppError {
                 bootstrapError = error

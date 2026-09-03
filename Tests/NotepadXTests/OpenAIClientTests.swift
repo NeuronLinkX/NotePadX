@@ -31,4 +31,18 @@ final class OpenAIClientTests: XCTestCase {
     func testIgnoresMalformedJSON() {
         XCTAssertNil(OpenAIClient.parseSSELine("data: {not valid json"))
     }
+
+    func testDetectsInsufficientQuotaAsBillingExhausted() {
+        let body = #"{"error":{"message":"You exceeded your current quota","type":"insufficient_quota","code":"insufficient_quota"}}"#
+        XCTAssertTrue(OpenAIClient.isBillingExhausted(body))
+    }
+
+    func testPlainRateLimitIsNotBillingExhausted() {
+        let body = #"{"error":{"message":"Rate limit reached for requests","type":"requests","code":"rate_limit_exceeded"}}"#
+        XCTAssertFalse(OpenAIClient.isBillingExhausted(body))
+    }
+
+    func testNilBodyIsNotBillingExhausted() {
+        XCTAssertFalse(OpenAIClient.isBillingExhausted(nil))
+    }
 }

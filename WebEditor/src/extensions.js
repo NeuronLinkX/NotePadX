@@ -93,12 +93,75 @@ export const Details = Node.create({
   },
 });
 
-// 첨부파일 칩. 실제 파일 저장/드래그앤드롭 업로드 파이프라인은 Phase 3(Attachment 서비스)에서
-// 연결되며, 여기서는 문서 스키마와 렌더링만 미리 지원한다.
+// 확장자별로 실제 앱 아이콘과 비슷한 색·라벨을 붙인 "문서 + 접힌 모서리" 모양 SVG를 만든다.
+// 실제 macOS 파일 아이콘을 가져올 방법이 WKWebView 안에는 없으므로, 한글(HWP)·PDF·Word처럼
+// 파일 종류를 한눈에 구분할 수 있는 색상 코드를 대신 쓴다.
+const FILE_KIND_BY_EXTENSION = {
+  pdf: { label: "PDF", color: "#E5493D" },
+  doc: { label: "DOC", color: "#2B579A" },
+  docx: { label: "DOC", color: "#2B579A" },
+  xls: { label: "XLS", color: "#1D6F42" },
+  xlsx: { label: "XLS", color: "#1D6F42" },
+  csv: { label: "CSV", color: "#1D6F42" },
+  ppt: { label: "PPT", color: "#C43E1C" },
+  pptx: { label: "PPT", color: "#C43E1C" },
+  hwp: { label: "한글", color: "#1C6DD0" },
+  hwpx: { label: "한글", color: "#1C6DD0" },
+  zip: { label: "ZIP", color: "#8E8E93" },
+  rar: { label: "ZIP", color: "#8E8E93" },
+  "7z": { label: "ZIP", color: "#8E8E93" },
+  txt: { label: "TXT", color: "#8E8E93" },
+};
+
+function fileKind(mimeType, fileName) {
+  const ext = String(fileName || "").split(".").pop().toLowerCase();
+  if (FILE_KIND_BY_EXTENSION[ext]) return FILE_KIND_BY_EXTENSION[ext];
+  if (mimeType && mimeType.startsWith("text/")) return { label: "TXT", color: "#8E8E93" };
+  return { label: "", color: "#8E8E93" };
+}
+
+/** 문서 한 장 + 오른쪽 위 접힌 모서리 + 하단 색 라벨 모양의 파일 아이콘 SVG. */
+function fileIconSVG(mimeType, fileName) {
+  const { label, color } = fileKind(mimeType, fileName);
+  const labelSVG = label
+    ? `<rect x="4" y="46" width="40" height="16" rx="3" fill="${color}"/>
+       <text x="24" y="58" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff"
+             font-family="-apple-system, BlinkMacSystemFont, sans-serif">${label}</text>`
+    : "";
+  return `
+    <svg viewBox="0 0 48 60" width="40" height="50" xmlns="http://www.w3.org/2000/svg">
+      <path d="M6 2 H30 L42 14 V58 H6 Z" style="fill:var(--nx-bg); stroke:var(--nx-border); stroke-width:1.5"/>
+      <path d="M30 2 L42 14 H30 Z" style="fill:var(--nx-border)"/>
+      ${labelSVG}
+    </svg>
+  `;
+}
+
+function formatByteSize(bytes) {
+  if (!bytes || bytes <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 || value >= 10 ? 0 : 1;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+// 첨부파일 카드. 실제 바이트는 문서(JSON)가 아니라 앱 전용 Attachments 폴더에 저장되고
+// (AttachmentStorage.swift), 여기 노드에는 attachmentId·파일명·크기·MIME 타입만 참조로
+// 남는다 — 큰 파일을 노트마다 base64로 통째로 들고 있지 않기 위해서다. 클릭하면
+// onOpenAttachment(configure로 주입, editor.js가 Swift로 openAttachment 브리지 메시지를
+// 보내도록 연결한다)를 호출해 기본 앱으로 연다.
 export const FileAttachment = Node.create({
   name: "fileAttachment",
   group: "block",
   atom: true,
+  addOptions() {
+    return { onOpenAttachment: () => {} };
+  },
   addAttributes() {
     return {
       attachmentId: { default: null },
@@ -116,6 +179,51 @@ export const FileAttachment = Node.create({
       mergeAttributes(HTMLAttributes, { "data-file-attachment": "", class: "nx-file-attachment" }),
       `\u{1F4CE} ${node.attrs.fileName || "첨부파일"}`,
     ];
+  },
+  addNodeView() {
+    const openAttachment = this.options.onOpenAttachment;
+    return ({ node }) => {
+      // 아이콘이 위, 파일명(+크기)이 그 아래 — Finder 아이콘 보기/macOS Notes 첨부파일과
+      // 같은 배치. 파일 종류(PDF·한글·Word 등)는 아이콘 색·라벨로 구분하고, 실제 이름은
+      // 항상 아이콘 밑에 그대로 보여준다.
+      const wrapper = document.createElement("div");
+      wrapper.className = "nx-file-attachment";
+      wrapper.contentEditable = "false";
+      wrapper.dataset.fileAttachment = "";
+      wrapper.title = "클릭하면 기본 앱으로 엽니다";
+
+      const icon = document.createElement("div");
+      icon.className = "nx-file-attachment-icon";
+      icon.innerHTML = fileIconSVG(node.attrs.mimeType, node.attrs.fileName);
+
+      const name = document.createElement("span");
+      name.className = "nx-file-attachment-name";
+      name.textContent = node.attrs.fileName || "첨부파일";
+
+      const size = document.createElement("span");
+      size.className = "nx-file-attachment-size";
+      size.textContent = formatByteSize(node.attrs.byteSize);
+
+      wrapper.appendChild(icon);
+      wrapper.appendChild(name);
+      wrapper.appendChild(size);
+
+      wrapper.addEventListener("click", () => {
+        openAttachment(node.attrs.attachmentId, node.attrs.fileName);
+      });
+
+      return {
+        dom: wrapper,
+        update: updatedNode => {
+          if (updatedNode.type.name !== "fileAttachment") return false;
+          name.textContent = updatedNode.attrs.fileName || "첨부파일";
+          size.textContent = formatByteSize(updatedNode.attrs.byteSize);
+          icon.innerHTML = fileIconSVG(updatedNode.attrs.mimeType, updatedNode.attrs.fileName);
+          node = updatedNode;
+          return true;
+        },
+      };
+    };
   },
 });
 
@@ -198,6 +306,24 @@ export const ResizableImage = Node.create({
       if (node.attrs.title) img.title = node.attrs.title;
       wrapper.appendChild(img);
 
+      // wrapper의 CSS width: fit-content가 실측 기준으로 실제로는 작동하지 않아서(이 WKWebView
+      // 환경에서 block 요소가 그냥 auto width로 컨테이너 전체 폭을 채워버림), 손잡이(절대
+      // 위치, wrapper 기준 right/bottom)가 이미지의 실제 오른쪽 아래 모서리가 아니라 훨씬
+      // 넓은 wrapper의 모서리에 붙어서 이미지와 수십 px씩 떨어져 보이는 원인이었다. img가
+      // (max-width/max-height로 제한된) 자기 실제 크기로 다 그려진 뒤, 그 실측 폭을 wrapper에
+      // 그대로 못박아서 wrapper가 이미지 크기에 정확히 맞춰지게 한다. 사용자가 손잡이로 이미
+      // 직접 크기를 지정한 경우(node.attrs.width)는 그 값이 우선이므로 여기서 건드리지 않는다.
+      function syncWrapperWidthToRenderedImage() {
+        if (node.attrs.width) return;
+        if (!img.naturalWidth) return;
+        wrapper.style.width = `${img.getBoundingClientRect().width}px`;
+      }
+      if (img.complete) {
+        syncWrapperWidthToRenderedImage();
+      } else {
+        img.addEventListener("load", syncWrapperWidthToRenderedImage, { once: true });
+      }
+
       const handle = document.createElement("span");
       handle.className = "nx-image-resize-handle";
       handle.contentEditable = "false";
@@ -243,9 +369,16 @@ export const ResizableImage = Node.create({
         update: updatedNode => {
           if (updatedNode.type.name !== "image") return false;
           if (updatedNode.attrs.src !== node.attrs.src) img.src = updatedNode.attrs.src || "";
-          wrapper.style.width = updatedNode.attrs.width ? `${updatedNode.attrs.width}px` : "";
-          wrapper.classList.toggle("nx-image-resized", !!updatedNode.attrs.width);
           node = updatedNode;
+          if (updatedNode.attrs.width) {
+            wrapper.style.width = `${updatedNode.attrs.width}px`;
+            wrapper.classList.add("nx-image-resized");
+          } else {
+            // 그냥 width를 지워버리면(예전 코드) wrapper가 다시 fit-content(실제로는 안 먹는)에
+            // 기대게 되어 손잡이가 또 어긋난다 — 대신 실제 렌더된 이미지 크기로 다시 맞춘다.
+            wrapper.classList.remove("nx-image-resized");
+            syncWrapperWidthToRenderedImage();
+          }
           return true;
         },
       };

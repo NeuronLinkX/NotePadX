@@ -41,7 +41,13 @@ struct LLMPanelView: View {
         .alert("OpenAI API 키가 없습니다", isPresented: $viewModel.isShowingMissingKeyWarning) {
             Button("확인", role: .cancel) {}
         } message: {
-            Text("AI 기능을 쓰려면 \(LLMUseCase.environmentVariableName) 환경 변수를 등록한 뒤 앱을 다시 시작하세요.")
+            Text("AI 기능을 쓰려면 설정 > AI 탭에서 키를 한 번 등록하세요. 등록하면 계속 유지됩니다.")
+        }
+        .alert("결제(Billing) 충전이 필요합니다", isPresented: $viewModel.isShowingBillingAlert) {
+            Button("Billing 페이지 열기") { viewModel.openBillingPage() }
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("OpenAI 계정의 크레딧이 소진된 것 같습니다. 결제 정보를 확인하고 충전한 뒤 다시 시도하세요.")
         }
     }
 
@@ -65,7 +71,7 @@ struct LLMPanelView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("OpenAI API 키가 설정되어 있지 않습니다.")
                 .font(.callout)
-            Text("\(LLMUseCase.environmentVariableName) 환경 변수를 등록한 뒤 앱을 다시 시작하세요.")
+            Text("설정 > AI 탭에서 키를 한 번 등록하면 계속 유지됩니다.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

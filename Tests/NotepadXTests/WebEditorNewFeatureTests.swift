@@ -21,8 +21,11 @@ final class WebEditorNewFeatureTests: XCTestCase {
             continuation = nil
         }
         func editorBridge(_ bridge: EditorBridge, didChangeDocument document: EditorDocument, plainText: String) {}
+        func editorBridge(_ bridge: EditorBridge, didChangeHeadings headings: [HeadingOutlineItem]) {}
         func editorBridge(_ bridge: EditorBridge, didChangeSelection selection: EditorSelectionState) {}
         func editorBridge(_ bridge: EditorBridge, didRequestOpenExternalLink url: URL) {}
+        func editorBridge(_ bridge: EditorBridge, didRequestSaveAttachment payload: SaveAttachmentPayload) {}
+        func editorBridge(_ bridge: EditorBridge, didRequestOpenAttachment payload: OpenAttachmentPayload) {}
         func editorBridge(_ bridge: EditorBridge, didReportError message: String) {}
     }
 
@@ -283,8 +286,11 @@ final class WebEditorNewFeatureTests: XCTestCase {
             func editorBridge(_ bridge: EditorBridge, didChangeDocument document: EditorDocument, plainText: String) {
                 lastDocument = document
             }
+            func editorBridge(_ bridge: EditorBridge, didChangeHeadings headings: [HeadingOutlineItem]) {}
             func editorBridge(_ bridge: EditorBridge, didChangeSelection selection: EditorSelectionState) {}
             func editorBridge(_ bridge: EditorBridge, didRequestOpenExternalLink url: URL) {}
+        func editorBridge(_ bridge: EditorBridge, didRequestSaveAttachment payload: SaveAttachmentPayload) {}
+        func editorBridge(_ bridge: EditorBridge, didRequestOpenAttachment payload: OpenAttachmentPayload) {}
             func editorBridge(_ bridge: EditorBridge, didReportError message: String) {}
         }
 
@@ -450,8 +456,11 @@ final class WebEditorNewFeatureTests: XCTestCase {
             func editorBridge(_ bridge: EditorBridge, didChangeDocument document: EditorDocument, plainText: String) {
                 lastDocument = document
             }
+            func editorBridge(_ bridge: EditorBridge, didChangeHeadings headings: [HeadingOutlineItem]) {}
             func editorBridge(_ bridge: EditorBridge, didChangeSelection selection: EditorSelectionState) {}
             func editorBridge(_ bridge: EditorBridge, didRequestOpenExternalLink url: URL) {}
+        func editorBridge(_ bridge: EditorBridge, didRequestSaveAttachment payload: SaveAttachmentPayload) {}
+        func editorBridge(_ bridge: EditorBridge, didRequestOpenAttachment payload: OpenAttachmentPayload) {}
             func editorBridge(_ bridge: EditorBridge, didReportError message: String) {}
         }
 

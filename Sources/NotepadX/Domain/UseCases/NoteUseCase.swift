@@ -91,6 +91,11 @@ struct NoteUseCase: Sendable {
         try await noteRepository.setFavorite(id: id, isFavorite: isFavorite)
     }
 
+    /// 메모 목록 → 사이드바 폴더 드래그 앤 드롭에서 호출한다.
+    func moveNote(id: UUID, toFolderID folderID: UUID?) async throws {
+        try await noteRepository.moveNote(id: id, toFolderID: folderID)
+    }
+
     /// 휴지통 30일 보관 정책 (스펙 11절).
     func purgeExpiredTrash(retentionDays: Int = 30) async throws {
         let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date.distantPast
