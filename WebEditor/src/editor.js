@@ -233,6 +233,7 @@ function postSelection() {
     linkHref: editor.getAttributes("link").href || null,
     textColor: editor.getAttributes("textStyle").color || null,
     fontSize: editor.getAttributes("textStyle").fontSize || null,
+    fontFamily: editor.getAttributes("textStyle").fontFamily || null,
   });
 }
 
@@ -407,7 +408,9 @@ const COMMANDS = {
   unsetTextColor: () => editor.chain().focus().unsetColor().run(),
   setHighlight: args => editor.chain().focus().toggleHighlight({ color: (args && args.color) || "#fff59d" }).run(),
   unsetHighlight: () => editor.chain().focus().unsetHighlight().run(),
-  setFontSize: args => editor.chain().focus().setFontSize((args && args.px) || "16px").run(),
+  // size는 유효한 CSS 길이 문자열이면 무엇이든 그대로 쓰인다("20pt"·"16px" 등) — pt로
+  // 통일해서 쓰는 이유는 EditorToolbar.swift의 5~125pt 프리셋/직접 입력과 맞추기 위해서다.
+  setFontSize: args => editor.chain().focus().setFontSize((args && args.size) || "16pt").run(),
   unsetFontSize: () => editor.chain().focus().unsetFontSize().run(),
   setFontFamily: args => editor.chain().focus().setFontFamily((args && args.family) || "inherit").run(),
   unsetFontFamily: () => editor.chain().focus().unsetFontFamily().run(),
