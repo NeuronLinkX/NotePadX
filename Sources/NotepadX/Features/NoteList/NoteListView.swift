@@ -4,6 +4,7 @@ struct NoteListView: View {
     @ObservedObject var viewModel: NoteListViewModel
     let selection: SidebarSelection
     let currentFolderID: UUID?
+    let availableFolders: [Folder]
     let availableTags: [Tag]
 
     @State private var isShowingBulkDeleteConfirm = false
@@ -23,7 +24,7 @@ struct NoteListView: View {
                 noteList
             }
         }
-        .navigationTitle(viewModel.isSearching ? "검색 결과" : selection.title)
+        .navigationTitle(viewModel.isSearching ? "검색 결과" : listTitle)
         .searchable(text: $viewModel.searchQuery, placement: .toolbar, prompt: "제목, 본문, 코드, 태그 검색")
         .toolbar {
             if viewModel.isSelecting {
@@ -81,6 +82,20 @@ struct NoteListView: View {
             Button("확인", role: .cancel) {}
         } message: {
             Text(viewModel.errorMessage ?? "")
+        }
+    }
+
+    /// `SidebarSelection.title`은 폴더/태그처럼 실제 이름이 있는 항목도 "폴더"/"태그"라는
+    /// 자리표시자만 돌려준다(그 enum은 UUID만 들고 있어 이름을 모른다) — 여기서 실제
+    /// 이름으로 바꿔서 보여준다. 목록에 없는(방금 삭제된 등) id는 자리표시자로 자연히 대체된다.
+    private var listTitle: String {
+        switch selection {
+        case .folder(let id):
+            return availableFolders.first(where: { $0.id == id })?.name ?? selection.title
+        case .tag(let id):
+            return availableTags.first(where: { $0.id == id })?.name ?? selection.title
+        default:
+            return selection.title
         }
     }
 
@@ -214,25 +229,31 @@ struct NoteListView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .onDrag { dragPayload(for: note).makeItemProvider() }
 
         if viewModel.isSelecting {
             content.onTapGesture { viewModel.toggleChecked(note.id) }
         } else {
-            content.contextMenu {
-                if selection == .trash {
-                    Button("복원") { Task { await viewModel.restore(note) } }
-                    Button("지금 완전히 삭제", role: .destructive) {
-                        Task { await viewModel.deletePermanently(note) }
-                    }
-                } else {
-                    Button(note.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가") {
-                        Task { await viewModel.toggleFavorite(note) }
-                    }
-                    Button("휴지통으로 이동", role: .destructive) {
-                        Task { await viewModel.moveToTrash(note) }
+            // List(selection:)의 기본 클릭-선택 동작이 .onDrag(드래그 앤 드롭 소스)와 같은 행에
+            // 있으면 macOS에서 이따금 씹힌다 — 클릭해도 선택(=편집기에 열림)이 안 되던 원인이라,
+            // 명시적으로 선택을 지정해서 List의 암묵적 처리에 기대지 않게 한다.
+            content
+                .onTapGesture { viewModel.selectedNoteID = note.id }
+                .contextMenu {
+                    if selection == .trash {
+                        Button("복원") { Task { await viewModel.restore(note) } }
+                        Button("지금 완전히 삭제", role: .destructive) {
+                            Task { await viewModel.deletePermanently(note) }
+                        }
+                    } else {
+                        Button(note.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가") {
+                            Task { await viewModel.toggleFavorite(note) }
+                        }
+                        Button("휴지통으로 이동", role: .destructive) {
+                            Task { await viewModel.moveToTrash(note) }
+                        }
                     }
                 }
-            }
         }
     }
 
@@ -251,6 +272,18 @@ struct NoteListView: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture { viewModel.selectedNoteID = hit.noteID }
+        .onDrag { NoteDragPayload(noteIDs: [hit.noteID]).makeItemProvider() }
+    }
+
+    /// 체크상자 선택 모드에서 이미 여러 개가 체크된 행을 끌면 체크된 것 전부를, 그 외에는
+    /// 지금 끌기 시작한 행 하나만 옮긴다.
+    private func dragPayload(for note: Note) -> NoteDragPayload {
+        if viewModel.isSelecting, viewModel.checkedNoteIDs.contains(note.id), viewModel.checkedNoteIDs.count > 1 {
+            return NoteDragPayload(noteIDs: Array(viewModel.checkedNoteIDs))
+        }
+        return NoteDragPayload(noteIDs: [note.id])
     }
 
     private func daysUntilPurge(_ deletedAt: Date) -> Int {

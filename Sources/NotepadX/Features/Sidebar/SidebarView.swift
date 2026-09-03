@@ -1,8 +1,13 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @ObservedObject var viewModel: SidebarViewModel
     @ObservedObject var oneDriveViewModel: OneDriveViewModel
+    /// 메모 목록에서 폴더 행으로 노트를 끌어다 놓았을 때 ContentView가 실제 이동을 수행한다 —
+    /// SidebarViewModel은 폴더/태그만 알고 NoteUseCase는 모르므로, 이동 자체는 여기서 하지 않는다.
+    var onDropNotesOnFolder: (Set<UUID>, UUID) -> Void = { _, _ in }
+    @State private var dropTargetFolderID: UUID?
     @State private var isShowingNewFolderPrompt = false
     @State private var newFolderName = ""
     @State private var renamingFolderID: UUID?
@@ -123,6 +128,13 @@ struct SidebarView: View {
     @ViewBuilder
     private func folderRow(_ folder: Folder) -> some View {
         Label(folder.name, systemImage: folder.iconSystemName)
+            // Label 혼자서는 아이콘+글자 너비만큼만 히트테스트 영역을 갖는다 — List가 선택
+            // 하이라이트는 행 전체로 넓혀 보여줘도, 우리가 붙이는 dropDestination의 감지
+            // 영역은 이 뷰의 실제 레이아웃 프레임을 그대로 따른다. 그래서 드롭 대상이 사실상
+            // 글자 위에만 좁게 반응하고 행의 나머지 빈 공간에서는 반응하지 않았다 — 행 전체
+            // 너비로 넓히고 그 사각형을 히트테스트 모양으로 명시해야 실제로 어디에 놓아도 먹힌다.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
             .tag(SidebarSelection.folder(folder.id))
             .contextMenu {
                 Button("이름 변경") {
@@ -132,6 +144,21 @@ struct SidebarView: View {
                 Button("삭제", role: .destructive) {
                     Task { await viewModel.delete(id: folder.id) }
                 }
+            }
+            .listRowBackground(dropTargetFolderID == folder.id ? Color.accentColor.opacity(0.18) : nil)
+            .onDrop(of: [UTType.notepadXNoteIDs], isTargeted: Binding(
+                get: { dropTargetFolderID == folder.id },
+                set: { isTargeted in
+                    // 드래그가 한 폴더 행에서 다른 행으로 넘어갈 때 두 콜백의 도착 순서가
+                    // 보장되지 않으므로, "떠났다"는 이 행이 여전히 표시 중일 때만 지운다 —
+                    // 그래야 새 행이 먼저 켜진 뒤 옛 행이 늦게 꺼지면서 새 강조를 지우는 일이 없다.
+                    dropTargetFolderID = isTargeted ? folder.id : (dropTargetFolderID == folder.id ? nil : dropTargetFolderID)
+                }
+            )) { providers in
+                NoteDragPayload.loadAll(from: providers) { ids in
+                    onDropNotesOnFolder(ids, folder.id)
+                }
+                return true
             }
     }
 

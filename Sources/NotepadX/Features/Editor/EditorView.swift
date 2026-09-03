@@ -35,6 +35,11 @@ struct EditorView: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            if viewModel.isShowingOutline, viewModel.note != nil {
+                DocumentOutlineView(viewModel: viewModel)
+                Divider()
+            }
+
             Group {
                 if viewModel.note != nil {
                     VStack(spacing: 0) {
@@ -151,6 +156,14 @@ struct EditorView: View {
             .disabled(viewModel.note == nil)
 
             if viewModel.note != nil {
+                Button { viewModel.isShowingOutline.toggle() } label: {
+                    Image(systemName: "list.bullet.indent")
+                }
+                .foregroundStyle(viewModel.isShowingOutline ? Color.accentColor : Color.primary)
+                .help("문서 개요")
+                .accessibilityLabel("문서 개요")
+                .accessibilityAddTraits(viewModel.isShowingOutline ? [.isSelected] : [])
+
                 Menu {
                     Button("버전으로 저장") { Task { await viewModel.saveVersionSnapshot() } }
                     Button("버전 기록 보기…") { isShowingRevisionHistory = true }
@@ -244,10 +257,20 @@ struct EditorView: View {
             if let language = viewModel.selection.codeBlockLanguage {
                 Text("코드 블록 · \(language)")
             }
+            Text(wordCountText)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
+    }
+
+    /// 윈도우 메모장처럼 선택 영역이 있으면 그 부분만, 없으면 문서 전체 글자수·단어수를 보여준다.
+    private var wordCountText: String {
+        if !viewModel.selection.empty, !viewModel.selection.selectedText.isEmpty {
+            let text = viewModel.selection.selectedText
+            return "선택 영역 \(text.count)자 · \(EditorViewModel.wordCount(in: text))단어"
+        }
+        return "\(viewModel.documentCharacterCount)자 · \(viewModel.documentWordCount)단어"
     }
 }

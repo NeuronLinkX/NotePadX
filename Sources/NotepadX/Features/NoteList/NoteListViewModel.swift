@@ -21,6 +21,7 @@ final class NoteListViewModel: ObservableObject {
     private let tagUseCase: TagUseCase
     private let searchUseCase: SearchUseCase
     private var searchTask: Task<Void, Never>?
+    private var currentFilter: NoteListFilter = .all
 
     init(noteUseCase: NoteUseCase, tagUseCase: TagUseCase, searchUseCase: SearchUseCase) {
         self.noteUseCase = noteUseCase
@@ -33,6 +34,7 @@ final class NoteListViewModel: ObservableObject {
     }
 
     func load(filter: NoteListFilter) async {
+        currentFilter = filter
         do {
             notes = try await noteUseCase.fetchNotes(filter: filter)
             if let selectedNoteID, notes.contains(where: { $0.id == selectedNoteID }) {
@@ -76,6 +78,31 @@ final class NoteListViewModel: ObservableObject {
             }
         } catch {
             report(error)
+        }
+    }
+
+    /// 메모 목록에서 사이드바 폴더로 드래그 앤 드롭했을 때 호출한다. 지금 보고 있는 화면이
+    /// 다른 특정 폴더라면(= 이동 후 이 목록에 더는 속하지 않으면) 그 자리에서 사라져야 하고,
+    /// "모든 메모"·"즐겨찾기"·태그·최근 메모처럼 폴더를 가리지 않는 화면이라면 그대로 남되
+    /// folderID만 갱신하면 된다.
+    func moveNotes(_ ids: Set<UUID>, toFolderID folderID: UUID?) async {
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            do {
+                try await noteUseCase.moveNote(id: id, toFolderID: folderID)
+            } catch {
+                report(error)
+            }
+        }
+        if case .folder(let currentFolderID) = currentFilter, currentFolderID != folderID {
+            notes.removeAll { ids.contains($0.id) }
+            if let selectedNoteID, ids.contains(selectedNoteID) {
+                self.selectedNoteID = notes.first?.id
+            }
+        } else {
+            for index in notes.indices where ids.contains(notes[index].id) {
+                notes[index].folderID = folderID
+            }
         }
     }
 

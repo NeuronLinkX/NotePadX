@@ -4,6 +4,7 @@ enum AIClientError: LocalizedError, Sendable, Equatable {
     case invalidBaseURL
     case missingAPIKey
     case invalidAPIKey
+    case billingRequired
     case network
     case serverError(Int)
     case httpError(Int)
@@ -13,6 +14,7 @@ enum AIClientError: LocalizedError, Sendable, Equatable {
         case .invalidBaseURL: return "API Base URL이 올바르지 않습니다."
         case .missingAPIKey: return "OpenAI API 키가 설정되어 있지 않습니다. 설정 > AI 탭에서 입력하세요."
         case .invalidAPIKey: return "API 키가 유효하지 않습니다. 설정에서 키를 다시 확인하세요."
+        case .billingRequired: return "OpenAI 크레딧이 부족합니다. 결제(Billing) 정보를 확인하고 충전한 뒤 다시 시도하세요."
         case .network: return "네트워크 응답을 확인할 수 없습니다."
         case .serverError(let code): return "AI 서버에 일시적인 문제가 있습니다 (코드 \(code))."
         case .httpError(let code): return "요청이 실패했습니다 (코드 \(code))."
@@ -52,7 +54,14 @@ struct OpenAIClient: Sendable {
                 do {
                     let request = try Self.makeRequest(messages: messages, settings: settings, apiKey: apiKey, stream: true)
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
-                    try Self.validate(response: response)
+                    if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                        var errorBody = ""
+                        for try await line in bytes.lines {
+                            errorBody += line
+                            if errorBody.utf8.count > 4000 { break }
+                        }
+                        try Self.validate(response: response, bodyText: errorBody)
+                    }
 
                     for try await line in bytes.lines {
                         try Task.checkCancellation()
@@ -81,8 +90,8 @@ struct OpenAIClient: Sendable {
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = settings.timeoutSeconds
-        let (_, response) = try await URLSession.shared.data(for: request)
-        try Self.validate(response: response)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try Self.validate(response: response, bodyText: String(data: data, encoding: .utf8))
     }
 
     private static func makeRequest(messages: [AIChatMessage], settings: AISettings, apiKey: String, stream: Bool) throws -> URLRequest {
@@ -106,7 +115,7 @@ struct OpenAIClient: Sendable {
         return request
     }
 
-    private static func validate(response: URLResponse) throws {
+    private static func validate(response: URLResponse, bodyText: String? = nil) throws {
         guard let http = response as? HTTPURLResponse else { throw AIClientError.network }
         switch http.statusCode {
         case 200...299:
@@ -114,6 +123,9 @@ struct OpenAIClient: Sendable {
         case 401:
             throw AIClientError.invalidAPIKey
         case 429:
+            if isBillingExhausted(bodyText) {
+                throw AIClientError.billingRequired
+            }
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
             throw AppError.apiRateLimited(retryAfter: retryAfter)
         case 500...599:
@@ -121,6 +133,14 @@ struct OpenAIClient: Sendable {
         default:
             throw AIClientError.httpError(http.statusCode)
         }
+    }
+
+    /// OpenAI는 크레딧 소진(결제 필요)과 단순 초당 요청 과다를 똑같이 HTTP 429로 반환하고,
+    /// 응답 본문의 `"type"`/`"code"`로만 구분된다 (`insufficient_quota`). 전자는 "잠시 후
+    /// 재시도"로는 해결되지 않으므로 별도 안내가 필요해서 이 둘을 나눈다.
+    static func isBillingExhausted(_ bodyText: String?) -> Bool {
+        guard let bodyText else { return false }
+        return bodyText.contains("insufficient_quota") || bodyText.contains("billing_hard_limit_reached")
     }
 }
 

@@ -275,6 +275,49 @@ code {
   outline-offset: 2px;
 }
 
+/* Finder 아이콘 보기/macOS Notes 첨부파일처럼 아이콘이 위, 파일명이 그 아래로 오는 세로
+   배치다. display:table을 쓰는 이유: 이 WKWebView 환경에서는 width:fit-content가 실제로는
+   적용되지 않아(위 .nx-image-wrapper와 같은 문제) block 요소가 그냥 컨테이너 전체 폭으로
+   늘어나 버린다 — table은 새 CSS 키워드 없이도 옛날부터 안정적으로 내용 크기에 맞춰
+   줄어드는 block 레벨 상자라 같은 함정을 피할 수 있다. */
+.nx-file-attachment {
+  display: table;
+  text-align: center;
+  max-width: 160px;
+  margin: 0.4em 0;
+  padding: 10px 14px;
+  border: 1px solid var(--nx-border);
+  border-radius: 10px;
+  background: var(--nx-bg);
+  cursor: pointer;
+  transition: border-color 0.1s ease;
+}
+.nx-file-attachment:hover {
+  border-color: var(--nx-link);
+}
+.nx-file-attachment.ProseMirror-selectednode {
+  outline: 2px solid var(--nx-link);
+  outline-offset: 2px;
+}
+.nx-file-attachment-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+.nx-file-attachment-name {
+  display: block;
+  font-size: 0.85em;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+.nx-file-attachment-size {
+  display: block;
+  font-size: 0.75em;
+  color: var(--nx-text-secondary);
+  margin-top: 2px;
+}
+
 .ProseMirror .is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--nx-text-secondary);

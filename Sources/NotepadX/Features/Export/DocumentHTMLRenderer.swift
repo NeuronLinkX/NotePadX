@@ -38,7 +38,10 @@ final class DocumentHTMLRenderer: NSObject, EditorBridgeDelegate {
     }
 
     func editorBridge(_ bridge: EditorBridge, didChangeDocument document: EditorDocument, plainText: String) {}
+    func editorBridge(_ bridge: EditorBridge, didChangeHeadings headings: [HeadingOutlineItem]) {}
     func editorBridge(_ bridge: EditorBridge, didChangeSelection selection: EditorSelectionState) {}
     func editorBridge(_ bridge: EditorBridge, didRequestOpenExternalLink url: URL) {}
+    func editorBridge(_ bridge: EditorBridge, didRequestSaveAttachment payload: SaveAttachmentPayload) {}
+    func editorBridge(_ bridge: EditorBridge, didRequestOpenAttachment payload: OpenAttachmentPayload) {}
     func editorBridge(_ bridge: EditorBridge, didReportError message: String) {}
 }

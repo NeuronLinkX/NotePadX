@@ -32,6 +32,8 @@ final class EditorViewModel: NSObject, ObservableObject {
     @Published var isShowingFind = false
     @Published var findQuery = ""
     @Published var findHasNoMatch = false
+    @Published var isShowingOutline = false
+    @Published private(set) var headingOutline: [HeadingOutlineItem] = []
 
     let richEditor = RichEditorController()
 
@@ -54,6 +56,7 @@ final class EditorViewModel: NSObject, ObservableObject {
     private let noteUseCase: NoteUseCase
     private let tagUseCase: TagUseCase
     private let revisionUseCase: NoteRevisionUseCase
+    private let attachmentStorage = AttachmentStorage()
     private var autosave: AutosaveService?
 
     init(noteUseCase: NoteUseCase, tagUseCase: TagUseCase, revisionUseCase: NoteRevisionUseCase) {
@@ -79,6 +82,7 @@ final class EditorViewModel: NSObject, ObservableObject {
         externalConflict = false
         isShowingFind = false
         findQuery = ""
+        headingOutline = []
 
         guard let noteID else {
             note = nil
@@ -86,6 +90,7 @@ final class EditorViewModel: NSObject, ObservableObject {
             lastDocument = nil
             lastPlainText = ""
             hasUnsavedChanges = false
+            headingOutline = []
             if isEditorReady { richEditor.loadDocument(.fromPlainText("")) }
             return
         }
@@ -141,6 +146,21 @@ final class EditorViewModel: NSObject, ObservableObject {
 
     func perform(command: String, args: [String: Any]? = nil) {
         richEditor.applyCommand(command, args: args)
+    }
+
+    /// 왼쪽 개요 패널에서 제목을 클릭했을 때. `pos`는 JS/ProseMirror가 매긴 위치를 그대로
+    /// 왕복시키는 값이라 Swift에서는 해석하지 않는다.
+    func scrollToHeading(_ item: HeadingOutlineItem) {
+        richEditor.applyCommand("scrollToHeading", args: ["pos": item.pos])
+    }
+
+    // MARK: - 상태 표시줄 글자수·단어수 (윈도우 메모장 스타일 편의 기능)
+
+    var documentCharacterCount: Int { lastPlainText.count }
+    var documentWordCount: Int { Self.wordCount(in: lastPlainText) }
+
+    static func wordCount(in text: String) -> Int {
+        text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
     }
 
     func applyTheme(isDark: Bool) {
@@ -356,12 +376,37 @@ extension EditorViewModel: EditorBridgeDelegate {
         applyAndScheduleSave(base: current, title: title, document: document, plainText: plainText)
     }
 
+    func editorBridge(_ bridge: EditorBridge, didChangeHeadings headings: [HeadingOutlineItem]) {
+        headingOutline = headings
+    }
+
     func editorBridge(_ bridge: EditorBridge, didChangeSelection selectionState: EditorSelectionState) {
         selection = selectionState
     }
 
     func editorBridge(_ bridge: EditorBridge, didRequestOpenExternalLink url: URL) {
         NSWorkspace.shared.open(url)
+    }
+
+    /// 이미지가 아닌 파일을 드래그·붙여넣기했을 때. 문서에는 이미 JS가 fileAttachment
+    /// 노드를 넣어 뒀으므로(같은 attachmentId로), 여기서는 실제 바이트를 디스크에 쓰기만
+    /// 하면 된다 — 실패해도 노트 저장 자체를 막지 않고 오류만 알린다.
+    func editorBridge(_ bridge: EditorBridge, didRequestSaveAttachment payload: SaveAttachmentPayload) {
+        do {
+            try attachmentStorage.save(attachmentId: payload.attachmentId, fileName: payload.fileName, base64Data: payload.base64Data)
+        } catch {
+            report(error)
+        }
+    }
+
+    /// 첨부파일 카드를 클릭했을 때 기본 앱으로 연다 — 외부 링크를 여는 것과 같은 취급이다.
+    func editorBridge(_ bridge: EditorBridge, didRequestOpenAttachment payload: OpenAttachmentPayload) {
+        do {
+            let url = try attachmentStorage.url(attachmentId: payload.attachmentId, fileName: payload.fileName)
+            NSWorkspace.shared.open(url)
+        } catch {
+            report(error)
+        }
     }
 
     func editorBridge(_ bridge: EditorBridge, didReportError message: String) {
