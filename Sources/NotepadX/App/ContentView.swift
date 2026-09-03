@@ -56,13 +56,20 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(viewModel: sidebarViewModel, oneDriveViewModel: oneDriveViewModel)
+            SidebarView(
+                viewModel: sidebarViewModel,
+                oneDriveViewModel: oneDriveViewModel,
+                onDropNotesOnFolder: { ids, folderID in
+                    Task { await noteListViewModel.moveNotes(ids, toFolderID: folderID) }
+                }
+            )
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220)
         } content: {
             NoteListView(
                 viewModel: noteListViewModel,
                 selection: sidebarViewModel.selection,
                 currentFolderID: currentFolderID,
+                availableFolders: sidebarViewModel.folders,
                 availableTags: sidebarViewModel.tags
             )
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
