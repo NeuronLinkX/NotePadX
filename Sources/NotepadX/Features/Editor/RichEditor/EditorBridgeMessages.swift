@@ -50,6 +50,7 @@ struct EditorSelectionState: Decodable, Sendable, Equatable {
     var linkHref: String?
     var textColor: String?
     var fontSize: String?
+    var fontFamily: String?
 }
 
 struct OpenExternalLinkPayload: Decodable {

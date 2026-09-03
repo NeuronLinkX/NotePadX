@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// 스펙 4/6/7/8절의 서식 도구 모음. 실제 서식 적용은 전부 JS 쪽 Tiptap 커맨드로 위임하고,
@@ -8,11 +9,25 @@ struct EditorToolbar: View {
     @State private var highlightColor = Color.yellow
     @State private var isShowingLinkPrompt = false
     @State private var linkURLText = ""
+    @State private var isShowingFontSizePrompt = false
+    @State private var customFontSizeText = ""
+
+    /// 요청받은 5~125pt 기준값. 그 사이 값은 "직접 입력…"으로 자유롭게 넣을 수 있다.
+    private static let fontSizePresets = [5, 10, 15, 20, 50, 60, 100, 125]
+
+    /// 맥에 실제로 설치되어 있는 폰트 패밀리 전체 — 목록을 따로 손으로 추리지 않고 이
+    /// 시스템에 진짜 있는 글꼴만 보여줘서, 골라도 항상 정상적으로 적용되게 한다.
+    private static let availableFontFamilies: [String] = NSFontManager.shared.availableFontFamilies.sorted()
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
                 headingMenu
+
+                Divider().frame(height: 16)
+
+                fontFamilyMenu
+                fontSizeMenu
 
                 Divider().frame(height: 16)
 
@@ -98,6 +113,72 @@ struct EditorToolbar: View {
                 linkURLText = ""
             }
         }
+        .alert("글자 크기 직접 입력", isPresented: $isShowingFontSizePrompt) {
+            TextField("예: 22", text: $customFontSizeText)
+            Button("취소", role: .cancel) {}
+            Button("적용") {
+                if let points = Int(customFontSizeText.trimmingCharacters(in: .whitespaces)), points > 0 {
+                    viewModel.perform(command: "setFontSize", args: ["size": "\(points)pt"])
+                }
+                customFontSizeText = ""
+            }
+        } message: {
+            Text("포인트(pt) 단위 숫자를 입력하세요. 프리셋(\(Self.fontSizePresets.map { "\($0)" }.joined(separator: "·")))과 그 사이 값 모두 가능합니다.")
+        }
+    }
+
+    private var fontSizeMenu: some View {
+        Menu {
+            Button("기본값") { viewModel.perform(command: "unsetFontSize") }
+            Divider()
+            ForEach(Self.fontSizePresets, id: \.self) { points in
+                Button("\(points)pt") { viewModel.perform(command: "setFontSize", args: ["size": "\(points)pt"]) }
+            }
+            Divider()
+            Button("직접 입력…") {
+                customFontSizeText = currentFontSizePoints.map { String($0) } ?? ""
+                isShowingFontSizePrompt = true
+            }
+        } label: {
+            Label(fontSizeLabel, systemImage: "textformat.size")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("글자 크기")
+        .accessibilityLabel("글자 크기")
+    }
+
+    private var fontFamilyMenu: some View {
+        Menu {
+            Button("시스템 기본") { viewModel.perform(command: "unsetFontFamily") }
+            Divider()
+            ForEach(Self.availableFontFamilies, id: \.self) { family in
+                Button {
+                    viewModel.perform(command: "setFontFamily", args: ["family": family])
+                } label: {
+                    Text(family).font(.custom(family, size: 13))
+                }
+            }
+        } label: {
+            Label(viewModel.selection.fontFamily ?? "글꼴", systemImage: "textformat")
+                .lineLimit(1)
+                .frame(maxWidth: 90, alignment: .leading)
+        }
+        .menuStyle(.borderlessButton)
+        .help("글꼴")
+        .accessibilityLabel("글꼴")
+    }
+
+    /// "20pt" 같은 CSS 길이 문자열에서 숫자만 뽑아 낸다 — "직접 입력…"을 다시 열었을 때
+    /// 지금 적용된 값이 미리 채워져 있게 하기 위함이다.
+    private var currentFontSizePoints: Int? {
+        guard let raw = viewModel.selection.fontSize else { return nil }
+        let digits = raw.prefix { $0.isNumber }
+        return Int(digits)
+    }
+
+    private var fontSizeLabel: String {
+        currentFontSizePoints.map { "\($0)pt" } ?? "크기"
     }
 
     private var headingMenu: some View {
