@@ -9,7 +9,7 @@ final class EditorViewModel: NSObject, ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var selection = EditorSelectionState(
         from: 0, to: 0, empty: true, selectedText: "", activeMarks: [], activeBlockType: "paragraph",
-        headingLevel: nil, codeBlockLanguage: nil, linkHref: nil, textColor: nil, fontSize: nil
+        headingLevel: nil, codeBlockLanguage: nil, linkHref: nil, textColor: nil, fontSize: nil, fontFamily: nil
     )
     @Published private(set) var noteTags: [Tag] = []
     @Published private(set) var revisions: [NoteRevision] = []
