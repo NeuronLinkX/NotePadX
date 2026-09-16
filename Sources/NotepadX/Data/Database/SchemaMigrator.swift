@@ -104,6 +104,12 @@ enum SchemaMigrator {
             );
             """,
         ]),
+        // SVG 다이어그램 문서(스펙: 새 문서 > 다이어그램 만들기). document_json 컬럼을 그대로
+        // 재사용하고(text면 EditorDocument, diagram이면 DiagramDocument JSON), 이 컬럼으로만
+        // 구분한다. 기존 노트는 전부 'text'로 채워져 그대로 리치 텍스트 에디터로 열린다.
+        SchemaMigration(version: 4, statements: [
+            "ALTER TABLE note ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';",
+        ]),
     ]
 
     static func migrate(_ db: DatabaseManager) async throws {

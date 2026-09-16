@@ -8,7 +8,7 @@ final class EditorViewModel: NSObject, ObservableObject {
     @Published var hasUnsavedChanges = false
     @Published var errorMessage: String?
     @Published private(set) var selection = EditorSelectionState(
-        from: 0, to: 0, empty: true, selectedText: "", activeMarks: [], activeBlockType: "paragraph",
+        from: 0, to: 0, empty: true, line: 1, column: 1, selectedText: "", activeMarks: [], activeBlockType: "paragraph",
         headingLevel: nil, codeBlockLanguage: nil, linkHref: nil, textColor: nil, fontSize: nil, fontFamily: nil
     )
     @Published private(set) var noteTags: [Tag] = []
@@ -32,7 +32,15 @@ final class EditorViewModel: NSObject, ObservableObject {
     @Published var isShowingFind = false
     @Published var findQuery = ""
     @Published var findHasNoMatch = false
+    /// 찾기 및 바꾸기(Cmd+Option+F)에서 바꾸기 입력행을 펼친 상태.
+    @Published var isShowingReplace = false
+    @Published var replaceText = ""
+    @Published var findCaseSensitive = false
+    /// "3건 바꿨습니다" 같은 일회성 안내. 다음 찾기/바꾸기 조작이나 찾기 닫기에서 지운다.
+    @Published var findStatusMessage: String?
     @Published var isShowingOutline = false
+    @Published var isShowingGoToLine = false
+    @Published var goToLineInput = ""
     @Published private(set) var headingOutline: [HeadingOutlineItem] = []
 
     let richEditor = RichEditorController()
@@ -45,6 +53,9 @@ final class EditorViewModel: NSObject, ObservableObject {
     private(set) var note: Note?
     /// 내보내기(Export) 시트가 지금 편집 중인 문서 구조를 읽을 수 있도록 노출한다.
     var exportDocument: EditorDocument? { lastDocument }
+    /// note.kind == .diagram일 때만 채워진다. DiagramEditorView가 이 값을 그리고,
+    /// 편집할 때마다 updateDiagram(_:)으로 되돌려 보내 저장한다.
+    @Published var diagramDocument: DiagramDocument?
     private var isEditorReady = false
     private var lastDocument: EditorDocument?
     private var lastPlainText: String = ""
@@ -82,12 +93,18 @@ final class EditorViewModel: NSObject, ObservableObject {
         externalConflict = false
         isShowingFind = false
         findQuery = ""
+        isShowingReplace = false
+        replaceText = ""
+        findStatusMessage = nil
+        isShowingGoToLine = false
+        goToLineInput = ""
         headingOutline = []
 
         guard let noteID else {
             note = nil
             title = ""
             lastDocument = nil
+            diagramDocument = nil
             lastPlainText = ""
             hasUnsavedChanges = false
             headingOutline = []
@@ -104,15 +121,23 @@ final class EditorViewModel: NSObject, ObservableObject {
             title = loaded.title
             hasUnsavedChanges = false
             baseUpdatedAt = loaded.updatedAt
-            let document = (try? EditorDocument.decode(from: loaded.documentJSON)) ?? .fromPlainText(loaded.plainText)
-            lastDocument = document
             lastPlainText = loaded.plainText
             lastRevisionSnapshotAt = Date()
 
-            if isEditorReady {
-                richEditor.loadDocument(document)
+            if loaded.kind == .diagram {
+                lastDocument = nil
+                diagramDocument = (try? JSONDecoder().decode(DiagramDocument.self, from: loaded.documentJSON)) ?? DiagramDocument()
+                // 이전 노트가 리치 텍스트였다면 그 내용이 화면에 남아 있지 않게 비운다.
+                if isEditorReady { richEditor.loadDocument(.fromPlainText("")) }
             } else {
-                pendingLoad = loaded
+                diagramDocument = nil
+                let document = (try? EditorDocument.decode(from: loaded.documentJSON)) ?? .fromPlainText(loaded.plainText)
+                lastDocument = document
+                if isEditorReady {
+                    richEditor.loadDocument(document)
+                } else {
+                    pendingLoad = loaded
+                }
             }
             SaveCoordinator.shared.register(id: paneInstanceID) { [weak self] in
                 await self?.flush()
@@ -131,10 +156,27 @@ final class EditorViewModel: NSObject, ObservableObject {
         await load(noteID: noteID)
     }
 
-    /// 제목 TextField의 onChange에서 호출한다. 본문은 리치 에디터가 docChanged로 직접 보고한다.
+    /// 제목 TextField의 onChange에서 호출한다. 리치 텍스트는 본문을 리치 에디터가
+    /// docChanged로 직접 보고하고, 다이어그램은 DiagramEditorView가 마지막으로 보낸
+    /// diagramDocument를 그대로 다시 저장한다(내용은 그대로, 제목만 바뀌었으므로).
     func titleChanged() {
-        guard let current = note, let document = lastDocument else { return }
-        applyAndScheduleSave(base: current, title: title, document: document, plainText: lastPlainText)
+        guard let current = note else { return }
+        if let diagramDocument {
+            updateDiagram(diagramDocument)
+        } else if let document = lastDocument {
+            applyAndScheduleSave(base: current, title: title, document: document, plainText: lastPlainText)
+        }
+    }
+
+    /// 다이어그램 캔버스에서 도형/커넥터가 바뀔 때마다 호출한다(스펙: 새 문서 > 다이어그램 만들기).
+    func updateDiagram(_ document: DiagramDocument) {
+        guard let current = note, let data = try? JSONEncoder().encode(document) else { return }
+        diagramDocument = document
+        lastPlainText = document.derivedPlainText
+        let updated = noteUseCase.applyEdit(to: current, title: title, documentJSON: data, plainText: lastPlainText)
+        note = updated
+        hasUnsavedChanges = true
+        autosave?.scheduleSave(updated)
     }
 
     func flush() async {
@@ -158,6 +200,10 @@ final class EditorViewModel: NSObject, ObservableObject {
 
     var documentCharacterCount: Int { lastPlainText.count }
     var documentWordCount: Int { Self.wordCount(in: lastPlainText) }
+    /// 문서에 CRLF가 하나라도 있으면 CRLF로 보여준다 — 붙여넣기로 섞여 들어올 수 있는
+    /// 유일한 경로이고, 에디터가 새로 만드는 줄바꿈은 항상 LF다.
+    var lineEndingStyle: String { lastPlainText.contains("\r\n") ? "CRLF" : "LF" }
+    let textEncodingName = "UTF-8"
 
     static func wordCount(in text: String) -> Int {
         text.split(whereSeparator: { $0.isWhitespace || $0.isNewline }).count
@@ -191,14 +237,81 @@ final class EditorViewModel: NSObject, ObservableObject {
 
     func toggleFind() {
         isShowingFind.toggle()
-        if !isShowingFind { findQuery = "" }
+        if !isShowingFind {
+            findQuery = ""
+            isShowingReplace = false
+            findStatusMessage = nil
+        }
+    }
+
+    /// 찾기 및 바꾸기(macOS 관례: Cmd+Option+F)를 연다. 찾기 바가 닫혀 있었다면 같이 연다.
+    func toggleReplace() {
+        isShowingFind = true
+        isShowingReplace.toggle()
+        findStatusMessage = nil
     }
 
     func performFind(backwards: Bool = false) {
         guard !findQuery.isEmpty else { return }
-        richEditor.find(findQuery, backwards: backwards) { [weak self] found in
+        findStatusMessage = nil
+        richEditor.find(findQuery, backwards: backwards, caseSensitive: findCaseSensitive) { [weak self] found in
             self?.findHasNoMatch = !found
         }
+    }
+
+    /// 왼쪽 검색창(NoteListViewModel)에서 검색해 연 노트는, 사이드바 미리보기뿐 아니라
+    /// 본문에서도 일치 항목이 보이도록 로드 직후 같은 검색어로 찾기를 실행한다.
+    func highlightSearchMatches(_ query: String) {
+        guard !query.isEmpty else { return }
+        findQuery = query
+        richEditor.find(query) { [weak self] found in
+            self?.findHasNoMatch = !found
+        }
+    }
+
+    /// 현재 커서 이후의 첫 일치 항목 하나만 바꾸고, 다음 항목을 계속 찾는다.
+    func replaceCurrentMatch() {
+        guard !findQuery.isEmpty else { return }
+        richEditor.replaceCurrentMatch(query: findQuery, replacement: replaceText, caseSensitive: findCaseSensitive)
+        performFind()
+    }
+
+    /// 문서 전체에서 일치 항목을 모두 바꾸고, 몇 건을 바꿨는지 안내한다.
+    func replaceAllMatches() {
+        guard !findQuery.isEmpty else { return }
+        let count = Self.countOccurrences(of: findQuery, in: lastPlainText, caseSensitive: findCaseSensitive)
+        guard count > 0 else {
+            findStatusMessage = "일치하는 항목이 없습니다."
+            return
+        }
+        richEditor.replaceAll(query: findQuery, replacement: replaceText, caseSensitive: findCaseSensitive)
+        findStatusMessage = "\(count)건 바꿨습니다."
+    }
+
+    private static func countOccurrences(of query: String, in text: String, caseSensitive: Bool) -> Int {
+        guard !query.isEmpty else { return 0 }
+        let haystack = caseSensitive ? text : text.lowercased()
+        let needle = caseSensitive ? query : query.lowercased()
+        var count = 0
+        var searchRange = haystack.startIndex..<haystack.endIndex
+        while let range = haystack.range(of: needle, range: searchRange) {
+            count += 1
+            searchRange = range.upperBound..<haystack.endIndex
+        }
+        return count
+    }
+
+    func toggleGoToLine() {
+        isShowingGoToLine.toggle()
+        if !isShowingGoToLine { goToLineInput = "" }
+    }
+
+    /// 상태 표시줄의 "줄" 계산과 같은 규칙(스펙: 줄 번호 이동)으로 지정한 줄의 시작으로 이동한다.
+    func goToLine() {
+        guard let line = Int(goToLineInput.trimmingCharacters(in: .whitespaces)), line > 0 else { return }
+        richEditor.applyCommand("goToLine", args: ["line": line])
+        isShowingGoToLine = false
+        goToLineInput = ""
     }
 
     // MARK: - 태그

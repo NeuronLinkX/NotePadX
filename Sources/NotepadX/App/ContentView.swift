@@ -6,6 +6,7 @@ struct ContentView: View {
     @StateObject private var sidebarViewModel: SidebarViewModel
     @StateObject private var noteListViewModel: NoteListViewModel
     @StateObject private var workspace: WorkspaceViewModel
+    @StateObject private var openTabs: OpenTabsViewModel
     @ObservedObject private var oneDriveViewModel: OneDriveViewModel
 
     init(environment: AppEnvironment) {
@@ -23,12 +24,14 @@ struct ContentView: View {
             tagUseCase: environment.tagUseCase,
             revisionUseCase: environment.revisionUseCase
         )
+        let tabs = OpenTabsViewModel(noteUseCase: environment.noteUseCase)
         // 편집기에서 저장이 성공하면: 1) 노트 목록의 제목/미리보기를 즉시 갱신하고
         // 2) OneDrive 폴더가 설정되어 있으면 그 노트를 자동으로 동기화한다 — 폴더를 한 번
         // 고르고 나면 그 뒤로는 "지금 동기화"를 매번 누르지 않아도 되게 하기 위함이다.
         let oneDrive = environment.oneDriveViewModel
-        let onSaved: (Note) -> Void = { [weak noteList] note in
+        let onSaved: (Note) -> Void = { [weak noteList, weak tabs] note in
             noteList?.applyExternalUpdate(note)
+            tabs?.updateTitle(note.id, title: note.displayTitle)
             Task { await oneDrive.syncNoteIfConfigured(note.id) }
         }
         // 편집기 안에서 태그를 붙이거나 새로 만들면, 또는 노트를 영구 삭제해서 태그가 자동
@@ -46,12 +49,17 @@ struct ContentView: View {
         _sidebarViewModel = StateObject(wrappedValue: sidebar)
         _noteListViewModel = StateObject(wrappedValue: noteList)
         _workspace = StateObject(wrappedValue: workspaceViewModel)
+        _openTabs = StateObject(wrappedValue: tabs)
         _oneDriveViewModel = ObservedObject(wrappedValue: environment.oneDriveViewModel)
     }
 
     private var currentFolderID: UUID? {
         if case .folder(let id) = sidebarViewModel.selection { return id }
         return nil
+    }
+
+    private var searchHighlightQuery: String? {
+        noteListViewModel.isSearching ? noteListViewModel.searchQuery : nil
     }
 
     var body: some View {
@@ -74,7 +82,11 @@ struct ContentView: View {
             )
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
         } detail: {
-            editorArea
+            VStack(spacing: 0) {
+                EditorTabBarView(tabsViewModel: openTabs, activeNoteID: $noteListViewModel.selectedNoteID)
+                Divider()
+                editorArea
+            }
         }
         .focusedSceneValue(\.newNoteAction) {
             Task { await noteListViewModel.createNote(folderID: currentFolderID) }
@@ -94,8 +106,21 @@ struct ContentView: View {
         .focusedSceneValue(\.toggleVerticalSplitAction) {
             workspace.toggleVerticalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
         }
+        .focusedSceneValue(\.newTabAction) {
+            Task { await noteListViewModel.createNote(folderID: currentFolderID) }
+        }
+        .focusedSceneValue(\.closeTabAction, noteListViewModel.selectedNoteID != nil ? {
+            if let id = noteListViewModel.selectedNoteID {
+                noteListViewModel.selectedNoteID = openTabs.closeTab(id, activeNoteID: id)
+            }
+        } : nil)
         .onChange(of: sidebarViewModel.selection) { _, _ in
             noteListViewModel.selectedNoteID = nil
+        }
+        .onChange(of: noteListViewModel.selectedNoteID, initial: true) { _, newValue in
+            let knownTitle = noteListViewModel.notes.first(where: { $0.id == newValue })?.displayTitle
+                ?? noteListViewModel.searchResults.first(where: { $0.noteID == newValue })?.title
+            openTabs.noteOpened(newValue, knownTitle: knownTitle)
         }
     }
 
@@ -106,7 +131,8 @@ struct ContentView: View {
             EditorView(
                 viewModel: workspace.primaryEditor,
                 noteID: $noteListViewModel.selectedNoteID,
-                availableTags: sidebarViewModel.tags
+                availableTags: sidebarViewModel.tags,
+                searchHighlightQuery: searchHighlightQuery
             )
         case .horizontal, .vertical:
             ResizableSplitView(
@@ -118,7 +144,8 @@ struct ContentView: View {
                     noteID: $noteListViewModel.selectedNoteID,
                     availableTags: sidebarViewModel.tags,
                     notePickerOptions: noteListViewModel.notes,
-                    onClosePane: { workspace.closeSplit() }
+                    onClosePane: { workspace.closeSplit() },
+                    searchHighlightQuery: searchHighlightQuery
                 )
             } second: {
                 EditorView(

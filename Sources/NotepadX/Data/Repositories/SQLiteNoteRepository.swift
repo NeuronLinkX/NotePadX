@@ -9,7 +9,7 @@ struct SQLiteNoteRepository: NoteRepository {
 
     private static let selectColumns = """
         id, folder_id, title, document_json, plain_text, created_at, updated_at, \
-        deleted_at, is_favorite, is_pinned, source, content_hash, sync_state
+        deleted_at, is_favorite, is_pinned, source, content_hash, sync_state, kind
         """
 
     private func mapRow(_ row: StatementRow) throws -> Note {
@@ -28,6 +28,7 @@ struct SQLiteNoteRepository: NoteRepository {
         let source = NoteSource(rawValue: row.string(10) ?? "") ?? .local
         let contentHash = row.string(11) ?? ""
         let syncState = SyncState(rawValue: row.string(12) ?? "") ?? .notSynced
+        let kind = NoteKind(rawValue: row.string(13) ?? "") ?? .text
 
         return Note(
             id: id,
@@ -42,7 +43,8 @@ struct SQLiteNoteRepository: NoteRepository {
             isPinned: isPinned,
             source: source,
             contentHash: contentHash,
-            syncState: syncState
+            syncState: syncState,
+            kind: kind
         )
     }
 
@@ -61,6 +63,7 @@ struct SQLiteNoteRepository: NoteRepository {
             .text(note.source.rawValue),
             .text(note.contentHash),
             .text(note.syncState.rawValue),
+            .text(note.kind.rawValue),
         ]
     }
 
@@ -107,7 +110,7 @@ struct SQLiteNoteRepository: NoteRepository {
     func createNote(_ note: Note) async throws {
         let sql = """
             INSERT INTO note (\(Self.selectColumns)) \
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
         try await db.execute(sql, bindings(for: note))
     }
@@ -116,7 +119,7 @@ struct SQLiteNoteRepository: NoteRepository {
         let sql = """
             UPDATE note SET folder_id = ?, title = ?, document_json = ?, plain_text = ?, \
             updated_at = ?, deleted_at = ?, is_favorite = ?, is_pinned = ?, source = ?, \
-            content_hash = ?, sync_state = ? WHERE id = ?;
+            content_hash = ?, sync_state = ?, kind = ? WHERE id = ?;
             """
         let params: [DatabaseValue] = [
             note.folderID.map { .text($0.uuidString) } ?? .null,
@@ -130,6 +133,7 @@ struct SQLiteNoteRepository: NoteRepository {
             .text(note.source.rawValue),
             .text(note.contentHash),
             .text(note.syncState.rawValue),
+            .text(note.kind.rawValue),
             .text(note.id.uuidString),
         ]
         try await db.execute(sql, params)
@@ -139,7 +143,7 @@ struct SQLiteNoteRepository: NoteRepository {
         let sql = """
             UPDATE note SET folder_id = ?, title = ?, document_json = ?, plain_text = ?, \
             updated_at = ?, deleted_at = ?, is_favorite = ?, is_pinned = ?, source = ?, \
-            content_hash = ?, sync_state = ? WHERE id = ? AND updated_at = ?;
+            content_hash = ?, sync_state = ?, kind = ? WHERE id = ? AND updated_at = ?;
             """
         let params: [DatabaseValue] = [
             note.folderID.map { .text($0.uuidString) } ?? .null,
@@ -153,6 +157,7 @@ struct SQLiteNoteRepository: NoteRepository {
             .text(note.source.rawValue),
             .text(note.contentHash),
             .text(note.syncState.rawValue),
+            .text(note.kind.rawValue),
             .text(note.id.uuidString),
             .double(expectedUpdatedAt.timeIntervalSince1970),
         ]

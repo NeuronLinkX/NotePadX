@@ -41,6 +41,9 @@ struct EditorSelectionState: Decodable, Sendable, Equatable {
     var from: Int
     var to: Int
     var empty: Bool
+    /// 상태 표시줄의 "줄 X, 열 Y" 표시용 (1부터 시작).
+    var line: Int
+    var column: Int
     /// LLM 패널의 "선택 영역만 보내기" 범위에 쓴다.
     var selectedText: String
     var activeMarks: [String]

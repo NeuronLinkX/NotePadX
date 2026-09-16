@@ -218,12 +218,24 @@ function currentBlockType() {
   return "paragraph";
 }
 
+// 상태 표시줄의 "줄·열" 표시용. 문서 전체 글자수(documentCharacterCount)와 같은 규칙
+// (블록 구분자를 "\n"으로) 으로 커서 앞부분의 plain text를 뽑아 줄바꿈 개수를 센다 —
+// 그래야 여기서 계산한 줄 번호가 그 글자수 계산과 어긋나지 않는다.
+function lineColumnAt(pos) {
+  const textBefore = editor.state.doc.textBetween(0, pos, "\n", "\n");
+  const lines = textBefore.split("\n");
+  return { line: lines.length, column: lines[lines.length - 1].length + 1 };
+}
+
 function postSelection() {
   const { from, to, empty } = editor.state.selection;
+  const { line, column } = lineColumnAt(to);
   postToNative("selectionChanged", {
     from,
     to,
     empty,
+    line,
+    column,
     // Phase 7 LLM 패널이 "선택 영역만 보내기"를 하려면 선택된 실제 텍스트가 있어야 한다.
     selectedText: empty ? "" : editor.state.doc.textBetween(from, to, "\n"),
     activeMarks: ACTIVE_MARKS.filter(mark => editor.isActive(mark)),
@@ -442,7 +454,83 @@ const COMMANDS = {
     const clamped = Math.max(0, Math.min(pos, editor.state.doc.content.size));
     return editor.chain().focus().setTextSelection(clamped).scrollIntoView().run();
   },
+  replaceCurrentMatch: args => {
+    const { query, replacement, caseSensitive } = args || {};
+    const ranges = findAllRanges(query, !!caseSensitive);
+    if (ranges.length === 0) return false;
+    const cursor = editor.state.selection.to;
+    const match = ranges.find(r => r.from >= cursor) || ranges[0];
+    const content = replacement ? [{ type: "text", text: replacement }] : [];
+    return editor.chain().focus().insertContentAt(match, content)
+      .setTextSelection(match.from + (replacement || "").length).scrollIntoView().run();
+  },
+  // 줄 번호 이동(스펙: Go to Line). 상태 표시줄의 줄 번호(lineColumnAt)와 같은 규칙으로
+  // 블록 경계를 "\n"으로 세어, targetLine번째 줄의 시작 위치를 찾아 이동한다.
+  goToLine: args => {
+    const targetLine = args && typeof args.line === "number" ? args.line : 1;
+    let text = "";
+    const positions = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.isText) {
+        for (let i = 0; i < node.text.length; i++) positions.push(pos + i);
+        text += node.text;
+      } else if (node.isBlock && text.length > 0) {
+        positions.push(pos);
+        text += "\n";
+      }
+      return true;
+    });
+    const lines = text.split("\n");
+    const clampedLine = Math.max(1, Math.min(targetLine, lines.length));
+    let charIndex = 0;
+    for (let i = 0; i < clampedLine - 1; i++) charIndex += lines[i].length + 1;
+    const pos = positions[charIndex] !== undefined ? positions[charIndex] : editor.state.doc.content.size;
+    return editor.chain().focus().setTextSelection(pos).scrollIntoView().run();
+  },
+  replaceAll: args => {
+    const { query, replacement, caseSensitive } = args || {};
+    const ranges = findAllRanges(query, !!caseSensitive);
+    if (ranges.length === 0) return false;
+    const content = replacement ? [{ type: "text", text: replacement }] : [];
+    let chain = editor.chain().focus();
+    for (let i = ranges.length - 1; i >= 0; i--) {
+      chain = chain.insertContentAt(ranges[i], content);
+    }
+    return chain.run();
+  },
 };
+
+// 찾기 및 바꾸기(Ctrl+H → macOS에서는 Cmd+Option+F)용. WKWebView의 네이티브 find는
+// 하이라이트만 할 뿐 텍스트를 바꿀 수 없어서, 문서를 직접 훑어 바꿀 범위를 계산한다.
+// 텍스트블록(문단·제목·코드블록 등) 경계를 넘는 일치는 찾지 않는다 — 한 블록 안의 실제
+// 글자 위치만 쓰므로 범위가 항상 유효한 텍스트 노드를 가리킨다.
+function findAllRanges(query, caseSensitive) {
+  if (!query) return [];
+  const needle = caseSensitive ? query : query.toLowerCase();
+  const ranges = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (!node.isTextblock) return true;
+    let text = "";
+    const positions = [];
+    node.descendants((child, childPos) => {
+      if (child.isText) {
+        for (let i = 0; i < child.text.length; i++) positions.push(pos + 1 + childPos + i);
+        text += child.text;
+      }
+      return true;
+    });
+    const haystack = caseSensitive ? text : text.toLowerCase();
+    let idx = 0;
+    while (true) {
+      const found = haystack.indexOf(needle, idx);
+      if (found === -1) break;
+      ranges.push({ from: positions[found], to: positions[found + needle.length - 1] + 1 });
+      idx = found + needle.length;
+    }
+    return false;
+  });
+  return ranges;
+}
 
 function textToParagraphNodes(text) {
   const lines = String(text).split("\n");

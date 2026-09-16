@@ -62,6 +62,20 @@ final class NoteListViewModel: ObservableObject {
         }
     }
 
+    /// 새 문서 > 다이어그램 만들기 (스펙: SVG 다이어그램 편집기).
+    @discardableResult
+    func createDiagram(folderID: UUID?) async -> UUID? {
+        do {
+            let note = try await noteUseCase.createDiagram(folderID: folderID)
+            notes.insert(note, at: 0)
+            selectedNoteID = note.id
+            return note.id
+        } catch {
+            report(error)
+            return nil
+        }
+    }
+
     /// 편집기에서 저장이 성공한 직후 EditorViewModel.onNoteUpdated로 호출된다. 목록 전체를
     /// 다시 조회하지 않고 그 자리에서 제목/미리보기/수정 시각만 갱신해서, 사용자가 타이핑하는
     /// 도중에 목록 순서가 갑자기 바뀌며 시선을 뺏기지 않게 한다.

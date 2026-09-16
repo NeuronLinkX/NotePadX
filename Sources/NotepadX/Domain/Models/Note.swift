@@ -16,6 +16,13 @@ enum SyncState: String, Codable, Sendable, CaseIterable {
     case error
 }
 
+/// 노트의 편집기 종류. documentJSON은 종류에 따라 다른 스키마(EditorDocument 또는
+/// DiagramDocument)를 담는다 — 컬럼을 늘리지 않고 기존 BLOB 컬럼을 재사용한다.
+enum NoteKind: String, Codable, Sendable, CaseIterable, Hashable {
+    case text
+    case diagram
+}
+
 struct Note: Identifiable, Codable, Sendable, Equatable {
     let id: UUID
     var folderID: UUID?
@@ -32,6 +39,7 @@ struct Note: Identifiable, Codable, Sendable, Equatable {
     var source: NoteSource
     var contentHash: String
     var syncState: SyncState
+    var kind: NoteKind
 
     var isDeleted: Bool { deletedAt != nil }
 
@@ -48,7 +56,8 @@ struct Note: Identifiable, Codable, Sendable, Equatable {
         isPinned: Bool = false,
         source: NoteSource = .local,
         contentHash: String,
-        syncState: SyncState = .notSynced
+        syncState: SyncState = .notSynced,
+        kind: NoteKind = .text
     ) {
         self.id = id
         self.folderID = folderID
@@ -63,6 +72,7 @@ struct Note: Identifiable, Codable, Sendable, Equatable {
         self.source = source
         self.contentHash = contentHash
         self.syncState = syncState
+        self.kind = kind
     }
 }
 

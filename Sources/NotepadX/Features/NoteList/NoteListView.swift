@@ -42,8 +42,17 @@ struct NoteListView: View {
                     .disabled(viewModel.notes.isEmpty || viewModel.isSearching)
                 }
                 ToolbarItem {
-                    Button {
-                        Task { await viewModel.createNote(folderID: currentFolderID) }
+                    Menu {
+                        Button {
+                            Task { await viewModel.createNote(folderID: currentFolderID) }
+                        } label: {
+                            Label("새 메모", systemImage: "square.and.pencil")
+                        }
+                        Button {
+                            Task { await viewModel.createDiagram(folderID: currentFolderID) }
+                        } label: {
+                            Label("새 다이어그램", systemImage: "square.on.square")
+                        }
                     } label: {
                         Label("새 메모", systemImage: "square.and.pencil")
                     }
@@ -203,6 +212,11 @@ struct NoteListView: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                    if note.kind == .diagram {
+                        Image(systemName: "square.on.square")
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("다이어그램")
+                    }
                     Text(note.displayTitle)
                         .font(.headline)
                         .lineLimit(1)

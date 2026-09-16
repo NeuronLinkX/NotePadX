@@ -40,14 +40,37 @@ struct NoteUseCase: Sendable {
         return note
     }
 
+    /// 새 다이어그램 노트(스펙: 새 문서 > 다이어그램 만들기)를 빈 캔버스로 만든다.
+    @discardableResult
+    func createDiagram(folderID: UUID?) async throws -> Note {
+        let document = DiagramDocument()
+        let note = Note(
+            folderID: folderID,
+            title: "",
+            documentJSON: try JSONEncoder().encode(document),
+            plainText: "",
+            contentHash: Self.contentHash(for: ""),
+            kind: .diagram
+        )
+        try await noteRepository.createNote(note)
+        try await searchIndex.reindexNote(id: note.id)
+        return note
+    }
+
     /// WKWebView 리치 에디터(Tiptap)가 보내온 구조화 문서로 노트를 갱신한다.
     /// plainText는 JS가 함께 보내주는 파생값을 그대로 신뢰한다 — EditorDocument.derivedPlainText와
     /// 동일한 알고리즘을 두 곳에서 유지보수하지 않기 위해서다.
     func applyEdit(to note: Note, title: String, document: EditorDocument, plainText: String) throws -> Note {
+        try applyEdit(to: note, title: title, documentJSON: document.encoded(), plainText: plainText)
+    }
+
+    /// 다이어그램 에디터처럼 EditorDocument 스키마를 쓰지 않는 편집기가, 이미 인코딩된
+    /// documentJSON을 직접 넘길 때 쓴다.
+    func applyEdit(to note: Note, title: String, documentJSON: Data, plainText: String) -> Note {
         var updated = note
         updated.title = title
         updated.plainText = plainText
-        updated.documentJSON = try document.encoded()
+        updated.documentJSON = documentJSON
         updated.contentHash = Self.contentHash(for: plainText)
         updated.updatedAt = Date()
         return updated

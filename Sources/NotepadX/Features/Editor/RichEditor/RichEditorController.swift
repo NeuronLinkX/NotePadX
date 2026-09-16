@@ -80,15 +80,25 @@ final class RichEditorController: NSObject {
     }
 
     /// 패널별 독립 찾기 상태 (스펙 9절 "검색 상태"). WKWebView의 네이티브 하이라이트를 그대로 쓴다.
-    func find(_ text: String, backwards: Bool = false, completion: @escaping (Bool) -> Void = { _ in }) {
+    func find(_ text: String, backwards: Bool = false, caseSensitive: Bool = false, completion: @escaping (Bool) -> Void = { _ in }) {
         guard !text.isEmpty else { return }
         let configuration = WKFindConfiguration()
         configuration.backwards = backwards
-        configuration.caseSensitive = false
+        configuration.caseSensitive = caseSensitive
         configuration.wraps = true
         webView.find(text, configuration: configuration) { result in
             completion(result.matchFound)
         }
+    }
+
+    /// 찾기 및 바꾸기: 현재 커서 위치 이후(없으면 처음)의 첫 일치 항목 하나만 바꾼다.
+    func replaceCurrentMatch(query: String, replacement: String, caseSensitive: Bool) {
+        bridge.applyCommand("replaceCurrentMatch", args: ["query": query, "replacement": replacement, "caseSensitive": caseSensitive])
+    }
+
+    /// 찾기 및 바꾸기: 문서 전체에서 일치하는 항목을 모두 바꾼다.
+    func replaceAll(query: String, replacement: String, caseSensitive: Bool) {
+        bridge.applyCommand("replaceAll", args: ["query": query, "replacement": replacement, "caseSensitive": caseSensitive])
     }
 }
 
