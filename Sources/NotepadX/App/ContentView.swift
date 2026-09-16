@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// macOS Notes 스타일 3열 레이아웃 (스펙 4절): 사이드바 / 노트 목록 / 편집기.
 /// 편집기 영역 자체는 분할 편집(스펙 9절)을 지원하는 WorkspaceViewModel이 관리한다.
@@ -7,7 +9,9 @@ struct ContentView: View {
     @StateObject private var noteListViewModel: NoteListViewModel
     @StateObject private var workspace: WorkspaceViewModel
     @StateObject private var openTabs: OpenTabsViewModel
+    @StateObject private var noteGraphViewModel: NoteGraphViewModel
     @ObservedObject private var oneDriveViewModel: OneDriveViewModel
+    @State private var standalonePDFURL: URL?
 
     init(environment: AppEnvironment) {
         let sidebar = SidebarViewModel(
@@ -25,6 +29,7 @@ struct ContentView: View {
             revisionUseCase: environment.revisionUseCase
         )
         let tabs = OpenTabsViewModel(noteUseCase: environment.noteUseCase)
+        let noteGraph = NoteGraphViewModel(noteUseCase: environment.noteUseCase)
         // 편집기에서 저장이 성공하면: 1) 노트 목록의 제목/미리보기를 즉시 갱신하고
         // 2) OneDrive 폴더가 설정되어 있으면 그 노트를 자동으로 동기화한다 — 폴더를 한 번
         // 고르고 나면 그 뒤로는 "지금 동기화"를 매번 누르지 않아도 되게 하기 위함이다.
@@ -50,6 +55,7 @@ struct ContentView: View {
         _noteListViewModel = StateObject(wrappedValue: noteList)
         _workspace = StateObject(wrappedValue: workspaceViewModel)
         _openTabs = StateObject(wrappedValue: tabs)
+        _noteGraphViewModel = StateObject(wrappedValue: noteGraph)
         _oneDriveViewModel = ObservedObject(wrappedValue: environment.oneDriveViewModel)
     }
 
@@ -114,6 +120,7 @@ struct ContentView: View {
                 noteListViewModel.selectedNoteID = openTabs.closeTab(id, activeNoteID: id)
             }
         } : nil)
+        .focusedSceneValue(\.openPDFAction) { presentPDFOpenPanel() }
         .onChange(of: sidebarViewModel.selection) { _, _ in
             noteListViewModel.selectedNoteID = nil
         }
@@ -122,6 +129,24 @@ struct ContentView: View {
                 ?? noteListViewModel.searchResults.first(where: { $0.noteID == newValue })?.title
             openTabs.noteOpened(newValue, knownTitle: knownTitle)
         }
+        .sheet(isPresented: Binding(
+            get: { standalonePDFURL != nil },
+            set: { if !$0 { standalonePDFURL = nil } }
+        )) {
+            if let url = standalonePDFURL {
+                PDFPreviewSheet(url: url, onClose: { standalonePDFURL = nil })
+            }
+        }
+    }
+
+    /// File > Open PDF… (스펙: Office Viewer). 노트에 첨부하지 않고도 디스크의 임의 PDF를 바로 본다.
+    private func presentPDFOpenPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        standalonePDFURL = url
     }
 
     @ViewBuilder
@@ -132,7 +157,8 @@ struct ContentView: View {
                 viewModel: workspace.primaryEditor,
                 noteID: $noteListViewModel.selectedNoteID,
                 availableTags: sidebarViewModel.tags,
-                searchHighlightQuery: searchHighlightQuery
+                searchHighlightQuery: searchHighlightQuery,
+                noteGraphViewModel: noteGraphViewModel
             )
         case .horizontal, .vertical:
             ResizableSplitView(
@@ -145,7 +171,8 @@ struct ContentView: View {
                     availableTags: sidebarViewModel.tags,
                     notePickerOptions: noteListViewModel.notes,
                     onClosePane: { workspace.closeSplit() },
-                    searchHighlightQuery: searchHighlightQuery
+                    searchHighlightQuery: searchHighlightQuery,
+                    noteGraphViewModel: noteGraphViewModel
                 )
             } second: {
                 EditorView(

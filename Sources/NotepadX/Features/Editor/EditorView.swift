@@ -15,6 +15,9 @@ struct EditorView: View {
     /// 왼쪽 검색창에서 검색 중일 때의 검색어. nil/빈 문자열이 아니면 노트를 연 직후
     /// 본문에서도 같은 검색어로 하이라이트한다.
     var searchHighlightQuery: String? = nil
+    /// nil이면 "연관 메모" 토글 버튼을 보여주지 않는다(분할의 보조 패널에서는 생략한다 —
+    /// 이 그래프는 노트 하나가 아니라 창 전체에 딸린 부가 시각화라서 하나만 있으면 된다).
+    var noteGraphViewModel: NoteGraphViewModel? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isShowingRevisionHistory = false
@@ -27,7 +30,8 @@ struct EditorView: View {
         availableTags: [Tag],
         notePickerOptions: [Note]? = nil,
         onClosePane: (() -> Void)? = nil,
-        searchHighlightQuery: String? = nil
+        searchHighlightQuery: String? = nil,
+        noteGraphViewModel: NoteGraphViewModel? = nil
     ) {
         self.viewModel = viewModel
         self._noteID = noteID
@@ -35,6 +39,7 @@ struct EditorView: View {
         self.notePickerOptions = notePickerOptions
         self.onClosePane = onClosePane
         self.searchHighlightQuery = searchHighlightQuery
+        self.noteGraphViewModel = noteGraphViewModel
         _llmPanelViewModel = StateObject(wrappedValue: LLMPanelViewModel(editorViewModel: viewModel))
     }
 
@@ -48,6 +53,14 @@ struct EditorView: View {
             }
             .sheet(isPresented: $viewModel.isShowingGoToLine) {
                 goToLineSheet
+            }
+            .sheet(isPresented: Binding(
+                get: { viewModel.pdfPreviewURL != nil },
+                set: { if !$0 { viewModel.pdfPreviewURL = nil } }
+            )) {
+                if let url = viewModel.pdfPreviewURL {
+                    PDFPreviewSheet(url: url, onClose: { viewModel.pdfPreviewURL = nil })
+                }
             }
         let withFocusedActions = withSheets
             .focusedSceneValue(\.exportAction, (viewModel.note != nil && !isDiagramNote) ? { isShowingExport = true } : nil)
@@ -165,6 +178,11 @@ struct EditorView: View {
                 Divider()
                 LLMPanelView(viewModel: llmPanelViewModel)
             }
+
+            if let noteGraphViewModel, noteGraphViewModel.isVisible {
+                Divider()
+                NoteGraphPanelView(viewModel: noteGraphViewModel)
+            }
         }
     }
 
@@ -248,6 +266,16 @@ struct EditorView: View {
                     .help("AI 패널")
                     .accessibilityLabel("AI 패널")
                     .accessibilityAddTraits(llmPanelViewModel.isVisible ? [.isSelected] : [])
+                }
+
+                if let noteGraphViewModel {
+                    Button { noteGraphViewModel.toggle() } label: {
+                        Image(systemName: noteGraphViewModel.isVisible ? "point.3.connected.trianglepath.dotted" : "point.3.filled.connected.trianglepath.dotted")
+                    }
+                    .foregroundStyle(noteGraphViewModel.isVisible ? Color.accentColor : Color.primary)
+                    .help("연관 메모")
+                    .accessibilityLabel("연관 메모")
+                    .accessibilityAddTraits(noteGraphViewModel.isVisible ? [.isSelected] : [])
                 }
             }
 

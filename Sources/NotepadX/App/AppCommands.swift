@@ -15,6 +15,7 @@ private struct ReplaceActionKey: FocusedValueKey { typealias Value = () -> Void 
 private struct GoToLineActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct NewTabActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct CloseTabActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct OpenPDFActionKey: FocusedValueKey { typealias Value = () -> Void }
 
 extension FocusedValues {
     var newNoteAction: (() -> Void)? {
@@ -61,6 +62,10 @@ extension FocusedValues {
         get { self[CloseTabActionKey.self] }
         set { self[CloseTabActionKey.self] = newValue }
     }
+    var openPDFAction: (() -> Void)? {
+        get { self[OpenPDFActionKey.self] }
+        set { self[OpenPDFActionKey.self] = newValue }
+    }
 }
 
 /// 스펙 19절 File/View 메뉴. Format 메뉴는 서식 툴바(EditorToolbar)로 대체했고,
@@ -77,6 +82,7 @@ struct AppCommands: Commands {
     @FocusedValue(\.goToLineAction) private var goToLineAction
     @FocusedValue(\.newTabAction) private var newTabAction
     @FocusedValue(\.closeTabAction) private var closeTabAction
+    @FocusedValue(\.openPDFAction) private var openPDFAction
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -97,6 +103,13 @@ struct AppCommands: Commands {
             Button("Close Tab") { closeTabAction?() }
                 .keyboardShortcut("w", modifiers: .command)
                 .disabled(closeTabAction == nil)
+
+            Divider()
+
+            // Office Viewer(스펙): 노트에 첨부하지 않고도 임의의 PDF를 바로 훑어본다.
+            Button("Open PDF…") { openPDFAction?() }
+                .keyboardShortcut("o", modifiers: .command)
+                .disabled(openPDFAction == nil)
         }
 
         CommandGroup(after: .saveItem) {

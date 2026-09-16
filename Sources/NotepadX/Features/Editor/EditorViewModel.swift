@@ -41,6 +41,8 @@ final class EditorViewModel: NSObject, ObservableObject {
     @Published var isShowingOutline = false
     @Published var isShowingGoToLine = false
     @Published var goToLineInput = ""
+    /// PDF 첨부파일을 클릭했을 때 채워진다 — nil이 아니면 EditorView가 인앱 미리보기 시트를 띄운다.
+    @Published var pdfPreviewURL: URL?
     @Published private(set) var headingOutline: [HeadingOutlineItem] = []
 
     let richEditor = RichEditorController()
@@ -67,13 +69,19 @@ final class EditorViewModel: NSObject, ObservableObject {
     private let noteUseCase: NoteUseCase
     private let tagUseCase: TagUseCase
     private let revisionUseCase: NoteRevisionUseCase
-    private let attachmentStorage = AttachmentStorage()
+    private let attachmentStorage: AttachmentStorage
     private var autosave: AutosaveService?
 
-    init(noteUseCase: NoteUseCase, tagUseCase: TagUseCase, revisionUseCase: NoteRevisionUseCase) {
+    init(
+        noteUseCase: NoteUseCase,
+        tagUseCase: TagUseCase,
+        revisionUseCase: NoteRevisionUseCase,
+        attachmentStorage: AttachmentStorage = AttachmentStorage()
+    ) {
         self.noteUseCase = noteUseCase
         self.tagUseCase = tagUseCase
         self.revisionUseCase = revisionUseCase
+        self.attachmentStorage = attachmentStorage
         super.init()
         richEditor.delegate = self
         autosave = AutosaveService { [weak self] note in
@@ -98,6 +106,7 @@ final class EditorViewModel: NSObject, ObservableObject {
         findStatusMessage = nil
         isShowingGoToLine = false
         goToLineInput = ""
+        pdfPreviewURL = nil
         headingOutline = []
 
         guard let noteID else {
@@ -512,11 +521,16 @@ extension EditorViewModel: EditorBridgeDelegate {
         }
     }
 
-    /// 첨부파일 카드를 클릭했을 때 기본 앱으로 연다 — 외부 링크를 여는 것과 같은 취급이다.
+    /// 첨부파일 카드를 클릭했을 때. PDF는 다른 앱으로 넘기지 않고 이 안에서 바로 미리 볼 수
+    /// 있게 하고(스펙: Office Viewer), 그 외 파일은 기존처럼 기본 앱으로 연다.
     func editorBridge(_ bridge: EditorBridge, didRequestOpenAttachment payload: OpenAttachmentPayload) {
         do {
             let url = try attachmentStorage.url(attachmentId: payload.attachmentId, fileName: payload.fileName)
-            NSWorkspace.shared.open(url)
+            if url.pathExtension.lowercased() == "pdf" {
+                pdfPreviewURL = url
+            } else {
+                NSWorkspace.shared.open(url)
+            }
         } catch {
             report(error)
         }
