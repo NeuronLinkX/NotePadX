@@ -46,4 +46,13 @@ final class OpenTabsViewModel: ObservableObject {
         guard !openNoteIDs.isEmpty else { return nil }
         return openNoteIDs[min(index, openNoteIDs.count - 1)]
     }
+
+    /// 탭을 드래그해서 순서를 바꾼다. source/destination은 openNoteIDs 안에서의 인덱스.
+    func moveTab(from source: Int, to destination: Int) {
+        guard openNoteIDs.indices.contains(source) else { return }
+        let clampedDestination = min(max(destination, 0), openNoteIDs.count - 1)
+        guard clampedDestination != source else { return }
+        let id = openNoteIDs.remove(at: source)
+        openNoteIDs.insert(id, at: clampedDestination)
+    }
 }

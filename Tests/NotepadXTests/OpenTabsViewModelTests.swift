@@ -84,6 +84,29 @@ final class OpenTabsViewModelTests: XCTestCase {
         XCTAssertEqual(tabs.openNoteIDs, [b])
     }
 
+    func testMoveTabReordersOpenNoteIDs() async throws {
+        let (tabs, _) = try await makeTabs()
+        let a = UUID(), b = UUID(), c = UUID()
+        tabs.noteOpened(a, knownTitle: "A")
+        tabs.noteOpened(b, knownTitle: "B")
+        tabs.noteOpened(c, knownTitle: "C")
+
+        tabs.moveTab(from: 0, to: 2)
+
+        XCTAssertEqual(tabs.openNoteIDs, [b, c, a])
+    }
+
+    func testMoveTabClampsDestinationToValidRange() async throws {
+        let (tabs, _) = try await makeTabs()
+        let a = UUID(), b = UUID()
+        tabs.noteOpened(a, knownTitle: "A")
+        tabs.noteOpened(b, knownTitle: "B")
+
+        tabs.moveTab(from: 0, to: 99)
+
+        XCTAssertEqual(tabs.openNoteIDs, [b, a])
+    }
+
     func testUpdateTitleOnlyAppliesToTabsThatAreStillOpen() async throws {
         let (tabs, _) = try await makeTabs()
         let openID = UUID()

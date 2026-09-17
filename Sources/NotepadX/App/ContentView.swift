@@ -89,6 +89,8 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
         } detail: {
             VStack(spacing: 0) {
+                DiagnosticTestButton()
+                    .frame(height: 28)
                 EditorTabBarView(tabsViewModel: openTabs, activeNoteID: $noteListViewModel.selectedNoteID)
                 Divider()
                 editorArea
