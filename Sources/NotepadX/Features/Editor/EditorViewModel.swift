@@ -55,9 +55,10 @@ final class EditorViewModel: NSObject, ObservableObject {
     private(set) var note: Note?
     /// 내보내기(Export) 시트가 지금 편집 중인 문서 구조를 읽을 수 있도록 노출한다.
     var exportDocument: EditorDocument? { lastDocument }
-    /// note.kind == .diagram일 때만 채워진다. DiagramEditorView가 이 값을 그리고,
-    /// 편집할 때마다 updateDiagram(_:)으로 되돌려 보내 저장한다.
-    @Published var diagramDocument: DiagramDocument?
+    /// note.kind == .diagram일 때만 채워진다. SVGViewerView가 이 값을 그리고, 새 SVG를
+    /// 불러올 때마다 updateSVG(_:)로 되돌려 보내 저장한다. 그리기 도구는 없고 불러오기/
+    /// 보기/저장만 지원한다(스펙: 다이어그램 편집기 대신 SVG 뷰어로 단순화).
+    @Published var svgText: String = ""
     private var isEditorReady = false
     private var lastDocument: EditorDocument?
     private var lastPlainText: String = ""
@@ -89,9 +90,15 @@ final class EditorViewModel: NSObject, ObservableObject {
         }
     }
 
+    /// 탭을 빠르게 여러 번 전환하면 `.task(id: noteID)`가 이전 load()를 취소 신호로
+    /// 표시하지만, Swift의 협조적 취소는 await 지점을 직접 확인하지 않으면 실행을 막지
+    /// 않는다 — 그래서 먼저 시작한(이미 떠난 탭의) load()가 나중에 끝나면서 방금 켠 탭의
+    /// note/svgText/lastDocument를 덮어써 버릴 수 있었다(탭 제목은 새 노트인데 본문은
+    /// 이전 노트로 보이던 원인). await 직후마다 취소 여부를 확인해 그런 역전을 막는다.
     func load(noteID: UUID?) async {
         if note != nil {
             await flush()
+            guard !Task.isCancelled else { return }
             SaveCoordinator.shared.unregister(id: paneInstanceID)
         }
 
@@ -113,7 +120,7 @@ final class EditorViewModel: NSObject, ObservableObject {
             note = nil
             title = ""
             lastDocument = nil
-            diagramDocument = nil
+            svgText = ""
             lastPlainText = ""
             hasUnsavedChanges = false
             headingOutline = []
@@ -123,9 +130,11 @@ final class EditorViewModel: NSObject, ObservableObject {
 
         do {
             guard let loaded = try await noteUseCase.fetchNote(id: noteID) else {
+                guard !Task.isCancelled else { return }
                 note = nil
                 return
             }
+            guard !Task.isCancelled else { return }
             note = loaded
             title = loaded.title
             hasUnsavedChanges = false
@@ -135,11 +144,11 @@ final class EditorViewModel: NSObject, ObservableObject {
 
             if loaded.kind == .diagram {
                 lastDocument = nil
-                diagramDocument = (try? JSONDecoder().decode(DiagramDocument.self, from: loaded.documentJSON)) ?? DiagramDocument()
+                svgText = String(data: loaded.documentJSON, encoding: .utf8) ?? ""
                 // 이전 노트가 리치 텍스트였다면 그 내용이 화면에 남아 있지 않게 비운다.
                 if isEditorReady { richEditor.loadDocument(.fromPlainText("")) }
             } else {
-                diagramDocument = nil
+                svgText = ""
                 let document = (try? EditorDocument.decode(from: loaded.documentJSON)) ?? .fromPlainText(loaded.plainText)
                 lastDocument = document
                 if isEditorReady {
@@ -152,7 +161,9 @@ final class EditorViewModel: NSObject, ObservableObject {
                 await self?.flush()
             }
 
-            noteTags = try await tagUseCase.tags(forNote: noteID)
+            let tags = try await tagUseCase.tags(forNote: noteID)
+            guard !Task.isCancelled else { return }
+            noteTags = tags
         } catch {
             report(error)
         }
@@ -166,23 +177,22 @@ final class EditorViewModel: NSObject, ObservableObject {
     }
 
     /// 제목 TextField의 onChange에서 호출한다. 리치 텍스트는 본문을 리치 에디터가
-    /// docChanged로 직접 보고하고, 다이어그램은 DiagramEditorView가 마지막으로 보낸
-    /// diagramDocument를 그대로 다시 저장한다(내용은 그대로, 제목만 바뀌었으므로).
+    /// docChanged로 직접 보고하고, SVG 뷰어는 마지막으로 불러온 svgText를 그대로 다시
+    /// 저장한다(내용은 그대로, 제목만 바뀌었으므로).
     func titleChanged() {
         guard let current = note else { return }
-        if let diagramDocument {
-            updateDiagram(diagramDocument)
+        if current.kind == .diagram {
+            updateSVG(svgText)
         } else if let document = lastDocument {
             applyAndScheduleSave(base: current, title: title, document: document, plainText: lastPlainText)
         }
     }
 
-    /// 다이어그램 캔버스에서 도형/커넥터가 바뀔 때마다 호출한다(스펙: 새 문서 > 다이어그램 만들기).
-    func updateDiagram(_ document: DiagramDocument) {
-        guard let current = note, let data = try? JSONEncoder().encode(document) else { return }
-        diagramDocument = document
-        lastPlainText = document.derivedPlainText
-        let updated = noteUseCase.applyEdit(to: current, title: title, documentJSON: data, plainText: lastPlainText)
+    /// 새 SVG를 불러왔을 때 호출한다(스펙: SVG 뷰어 — 불러오기/보기/저장만 지원).
+    func updateSVG(_ text: String) {
+        guard let current = note, let data = text.data(using: .utf8) else { return }
+        svgText = text
+        let updated = noteUseCase.applyEdit(to: current, title: title, documentJSON: data, plainText: "")
         note = updated
         hasUnsavedChanges = true
         autosave?.scheduleSave(updated)

@@ -51,7 +51,7 @@ struct NoteListView: View {
                         Button {
                             Task { await viewModel.createDiagram(folderID: currentFolderID) }
                         } label: {
-                            Label("새 다이어그램", systemImage: "square.on.square")
+                            Label("새 SVG 뷰어", systemImage: "square.on.square")
                         }
                     } label: {
                         Label("새 메모", systemImage: "square.and.pencil")
@@ -215,7 +215,7 @@ struct NoteListView: View {
                     if note.kind == .diagram {
                         Image(systemName: "square.on.square")
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel("다이어그램")
+                            .accessibilityLabel("SVG 뷰어")
                     }
                     Text(note.displayTitle)
                         .font(.headline)

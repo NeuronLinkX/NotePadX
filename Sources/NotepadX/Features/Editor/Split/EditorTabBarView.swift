@@ -19,6 +19,8 @@ struct EditorTabBarView: View {
         }
     }
 
+    // 닫기(x)는 작은 자식 뷰에 별도 onTapGesture를 얹어 중첩시킨다 — 자식의 탭 영역이
+    // 그 자리에서 부모보다 우선하고, 나머지 영역은 부모(탭 선택)가 받는다.
     @ViewBuilder
     private func tab(for id: UUID) -> some View {
         let isActive = activeNoteID == id
@@ -26,18 +28,19 @@ struct EditorTabBarView: View {
             Text(tabsViewModel.titles[id] ?? "제목 없음")
                 .lineLimit(1)
                 .font(.caption)
-            Button {
-                closeTab(id)
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-            }
-            .buttonStyle(.plain)
-            .help("탭 닫기")
-            .accessibilityLabel("탭 닫기")
+                .frame(width: 112, alignment: .leading)
+
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 16)
+                .contentShape(Rectangle())
+                .onTapGesture { closeTab(id) }
+                .help("탭 닫기")
+                .accessibilityLabel("탭 닫기")
         }
         .padding(.horizontal, 10)
-        .frame(minWidth: 90, maxWidth: 180, minHeight: 32)
+        .frame(width: 150, height: 32)
         .background(isActive ? Color.accentColor.opacity(0.18) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { activeNoteID = id }

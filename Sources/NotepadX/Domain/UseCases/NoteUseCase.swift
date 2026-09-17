@@ -43,11 +43,10 @@ struct NoteUseCase: Sendable {
     /// 새 다이어그램 노트(스펙: 새 문서 > 다이어그램 만들기)를 빈 캔버스로 만든다.
     @discardableResult
     func createDiagram(folderID: UUID?) async throws -> Note {
-        let document = DiagramDocument()
         let note = Note(
             folderID: folderID,
             title: "",
-            documentJSON: try JSONEncoder().encode(document),
+            documentJSON: Data(),
             plainText: "",
             contentHash: Self.contentHash(for: ""),
             kind: .diagram

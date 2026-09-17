@@ -18,6 +18,19 @@ settings:
     # 직접 채우거나, project.yml을 커밋하지 않는 자신만의 로컬 사본에서 바꿔 쓴다.
     MICROSOFT_ENTRA_CLIENT_ID: ""
     MICROSOFT_ENTRA_REDIRECT_URI: "msauth.com.notepadx.app://auth"
+  configs:
+    # Release 최적화(-O, whole-module)에서 제스처/상태 갱신이 간헐적으로 씹히는 현상을
+    # 확인했다 — 똑같은 소스를 Debug(-Onone)로 돌리면 멀쩡하다. singlefile 컴파일
+    # 모드만 바꿔서는(교차 파일 whole-module 최적화만 끔) 코드가 조금만 바뀌어도 같은
+    # 부류의 문제가 다시 나타났다 — 즉 원인은 특정 교차 파일 최적화 하나가 아니라 -O
+    # 최적화 자체와 이 앱의 SwiftUI 상태 갱신 패턴이 부딪히는 좀 더 넓은 문제로 보인다.
+    # 정확한 원인을 더 좁히기 전까지는, Release도 Swift 코드 생성만큼은 Debug와
+    # 똑같이(-Onone) 맞춰서 신뢰성을 최우선으로 둔다 — 이 앱은 가벼운 UI 작업이 대부분이라
+    # 최적화 손실은 체감되지 않는다.
+    Release:
+      SWIFT_COMPILATION_MODE: singlefile
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      GCC_OPTIMIZATION_LEVEL: "0"
 
 targets:
   NotepadX:

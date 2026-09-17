@@ -22,6 +22,7 @@ struct EditorView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isShowingRevisionHistory = false
     @State private var isShowingExport = false
+    @State private var noteGraphWindowPresenter = NoteGraphWindowPresenter()
     @StateObject private var llmPanelViewModel: LLMPanelViewModel
 
     init(
@@ -70,6 +71,7 @@ struct EditorView: View {
         return withFocusedActions
             .task(id: noteID) {
                 await viewModel.load(noteID: noteID)
+                guard !Task.isCancelled else { return }
                 if let searchHighlightQuery, !searchHighlightQuery.isEmpty {
                     viewModel.highlightSearchMatches(searchHighlightQuery)
                 }
@@ -121,14 +123,7 @@ struct EditorView: View {
                         TagChipsView(viewModel: viewModel, availableTags: availableTags)
                         Divider()
 
-                        if let diagramDocument = viewModel.diagramDocument {
-                            DiagramEditorView(document: Binding(
-                                get: { diagramDocument },
-                                set: { viewModel.updateDiagram($0) }
-                            ))
-                        } else {
-                            ContentUnavailableView("다이어그램을 불러오는 중", systemImage: "square.on.square")
-                        }
+                        SVGViewerView(svgText: viewModel.svgText, onImport: { viewModel.updateSVG($0) })
                     }
                 } else if viewModel.note != nil {
                     VStack(spacing: 0) {
@@ -177,11 +172,6 @@ struct EditorView: View {
             if llmPanelViewModel.isVisible {
                 Divider()
                 LLMPanelView(viewModel: llmPanelViewModel)
-            }
-
-            if let noteGraphViewModel, noteGraphViewModel.isVisible {
-                Divider()
-                NoteGraphPanelView(viewModel: noteGraphViewModel)
             }
         }
     }
@@ -269,12 +259,12 @@ struct EditorView: View {
                 }
 
                 if let noteGraphViewModel {
-                    Button { noteGraphViewModel.toggle() } label: {
+                    Button { noteGraphWindowPresenter.show(viewModel: noteGraphViewModel) } label: {
                         Image(systemName: noteGraphViewModel.isVisible ? "point.3.connected.trianglepath.dotted" : "point.3.filled.connected.trianglepath.dotted")
                     }
                     .foregroundStyle(noteGraphViewModel.isVisible ? Color.accentColor : Color.primary)
-                    .help("연관 메모")
-                    .accessibilityLabel("연관 메모")
+                    .help("연관 메모 (새 창)")
+                    .accessibilityLabel("연관 메모, 새 창으로 열기")
                     .accessibilityAddTraits(noteGraphViewModel.isVisible ? [.isSelected] : [])
                 }
             }
