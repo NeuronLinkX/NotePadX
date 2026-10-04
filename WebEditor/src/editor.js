@@ -244,6 +244,7 @@ function postSelection() {
     codeBlockLanguage: editor.getAttributes("codeBlock").language || null,
     linkHref: editor.getAttributes("link").href || null,
     textColor: editor.getAttributes("textStyle").color || null,
+    highlightColor: editor.getAttributes("highlight").color || null,
     fontSize: editor.getAttributes("textStyle").fontSize || null,
     fontFamily: editor.getAttributes("textStyle").fontFamily || null,
   });
@@ -418,7 +419,8 @@ const COMMANDS = {
   unsetLink: () => editor.chain().focus().unsetLink().run(),
   setTextColor: args => editor.chain().focus().setColor((args && args.color) || "#000000").run(),
   unsetTextColor: () => editor.chain().focus().unsetColor().run(),
-  setHighlight: args => editor.chain().focus().toggleHighlight({ color: (args && args.color) || "#fff59d" }).run(),
+  // toggle이 아니라 "적용"이어야 한다 — 같은 색을 다시 고르면 형광펜이 조용히 사라지던 문제가 있었다.
+  setHighlight: args => editor.chain().focus().setHighlight({ color: (args && args.color) || "#fff59d" }).run(),
   unsetHighlight: () => editor.chain().focus().unsetHighlight().run(),
   // size는 유효한 CSS 길이 문자열이면 무엇이든 그대로 쓰인다("20pt"·"16px" 등) — pt로
   // 통일해서 쓰는 이유는 EditorToolbar.swift의 5~125pt 프리셋/직접 입력과 맞추기 위해서다.

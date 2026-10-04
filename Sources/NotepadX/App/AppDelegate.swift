@@ -8,11 +8,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 항목 자체를 Edit 메뉴에 추가하지 않는다.
     func applicationWillFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.set(true, forKey: "NSDisabledDictationMenuItem")
+
+        // 위젯의 notepadx:// 링크를 SwiftUI보다 먼저 직접 받는다. SwiftUI(WindowGroup)에 맡기면
+        // 링크마다 새 창이 만들어지고 handlesExternalEvents로도 막히지 않는다.
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURL(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
     }
 
+    @objc private func handleGetURL(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
+        guard let raw = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
+              let url = URL(string: raw),
+              let link = WidgetDeepLink(url: url) else { return }
+        Task { @MainActor in
+            WidgetDeepLinkRouter.shared.pending = link
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// 사용자가 다른 앱/바탕화면으로 넘어가는 순간이 위젯을 보게 되는 순간이므로, 저장을
+    /// 마친 직후 위젯용 최근 메모 요약도 같이 갱신한다.
     func applicationWillResignActive(_ notification: Notification) {
         Task { @MainActor in
             await SaveCoordinator.shared.flushAll()
+            await WidgetSnapshotService.shared.refresh()
         }
     }
 
@@ -20,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         Task { @MainActor in
             await SaveCoordinator.shared.flushAll()
+            await WidgetSnapshotService.shared.refresh()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater

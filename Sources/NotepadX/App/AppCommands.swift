@@ -15,6 +15,8 @@ private struct ReplaceActionKey: FocusedValueKey { typealias Value = () -> Void 
 private struct GoToLineActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct NewTabActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct CloseTabActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct PreviousTabActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct NextTabActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct OpenPDFActionKey: FocusedValueKey { typealias Value = () -> Void }
 
 extension FocusedValues {
@@ -62,6 +64,14 @@ extension FocusedValues {
         get { self[CloseTabActionKey.self] }
         set { self[CloseTabActionKey.self] = newValue }
     }
+    var previousTabAction: (() -> Void)? {
+        get { self[PreviousTabActionKey.self] }
+        set { self[PreviousTabActionKey.self] = newValue }
+    }
+    var nextTabAction: (() -> Void)? {
+        get { self[NextTabActionKey.self] }
+        set { self[NextTabActionKey.self] = newValue }
+    }
     var openPDFAction: (() -> Void)? {
         get { self[OpenPDFActionKey.self] }
         set { self[OpenPDFActionKey.self] = newValue }
@@ -82,6 +92,8 @@ struct AppCommands: Commands {
     @FocusedValue(\.goToLineAction) private var goToLineAction
     @FocusedValue(\.newTabAction) private var newTabAction
     @FocusedValue(\.closeTabAction) private var closeTabAction
+    @FocusedValue(\.previousTabAction) private var previousTabAction
+    @FocusedValue(\.nextTabAction) private var nextTabAction
     @FocusedValue(\.openPDFAction) private var openPDFAction
 
     var body: some Commands {
@@ -103,6 +115,15 @@ struct AppCommands: Commands {
             Button("Close Tab") { closeTabAction?() }
                 .keyboardShortcut("w", modifiers: .command)
                 .disabled(closeTabAction == nil)
+
+            // macOS 표준 탭 이동 단축키(Safari/Terminal/Xcode 공통).
+            Button("Show Previous Tab") { previousTabAction?() }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .disabled(previousTabAction == nil)
+
+            Button("Show Next Tab") { nextTabAction?() }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .disabled(nextTabAction == nil)
 
             Divider()
 

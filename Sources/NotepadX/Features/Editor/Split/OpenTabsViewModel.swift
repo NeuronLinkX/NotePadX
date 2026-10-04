@@ -55,4 +55,13 @@ final class OpenTabsViewModel: ObservableObject {
         let id = openNoteIDs.remove(at: source)
         openNoteIDs.insert(id, at: clampedDestination)
     }
+
+    /// ⌘⇧[ / ⌘⇧]로 이웃 탭으로 옮길 때 쓴다. 양 끝에서는 반대쪽 끝으로 돌아간다. 현재 탭이
+    /// 없거나 목록에 없으면 첫 번째 탭을 돌려준다.
+    func neighbor(of id: UUID?, offset: Int) -> UUID? {
+        guard !openNoteIDs.isEmpty else { return nil }
+        guard let id, let index = openNoteIDs.firstIndex(of: id) else { return openNoteIDs.first }
+        let count = openNoteIDs.count
+        return openNoteIDs[((index + offset) % count + count) % count]
+    }
 }

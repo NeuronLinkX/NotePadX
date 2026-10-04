@@ -56,10 +56,33 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Sources/NotepadX/Resources/NotepadX.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_STRICT_CONCURRENCY: minimal
+    dependencies:
+      - target: NotepadXWidget
     scheme:
       testTargets:
         - NotepadXTests
       commandLineArguments: {}
+
+  # 홈 화면/알림 센터 위젯. SwiftPM(swift build)은 Sources/NotepadX만 컴파일하므로 위젯 소스는
+  # 별도 폴더에 두고, 앱과 공유하는 WidgetSnapshot.swift만 파일 단위로 같이 컴파일한다.
+  NotepadXWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Sources/NotepadXWidget
+        excludes:
+          - "Info.plist"
+          - "NotepadXWidget.entitlements"
+      - path: Sources/NotepadX/Services/WidgetSnapshot.swift
+    settings:
+      base:
+        PRODUCT_NAME: NotepadXWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.notepadx.app.widget
+        INFOPLIST_FILE: Sources/NotepadXWidget/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Sources/NotepadXWidget/NotepadXWidget.entitlements
+        SKIP_INSTALL: YES
+        SWIFT_STRICT_CONCURRENCY: minimal
 
   NotepadXTests:
     type: bundle.unit-test

@@ -12,8 +12,10 @@ struct ContentView: View {
     @StateObject private var noteGraphViewModel: NoteGraphViewModel
     @ObservedObject private var oneDriveViewModel: OneDriveViewModel
     @State private var standalonePDFURL: URL?
+    @Binding private var pendingDeepLink: WidgetDeepLink?
 
-    init(environment: AppEnvironment) {
+    init(environment: AppEnvironment, pendingDeepLink: Binding<WidgetDeepLink?>) {
+        _pendingDeepLink = pendingDeepLink
         let sidebar = SidebarViewModel(
             folderUseCase: environment.folderUseCase,
             tagUseCase: environment.tagUseCase
@@ -69,6 +71,31 @@ struct ContentView: View {
     }
 
     var body: some View {
+        tabActions(on: fileActions(on: splitLayout))
+            .onChange(of: pendingDeepLink, initial: true) { _, link in
+                handleDeepLink(link)
+            }
+            .onChange(of: sidebarViewModel.selection) { _, _ in
+                noteListViewModel.selectedNoteID = nil
+            }
+            .onChange(of: noteListViewModel.selectedNoteID, initial: true) { _, newValue in
+                let knownTitle = noteListViewModel.notes.first(where: { $0.id == newValue })?.displayTitle
+                    ?? noteListViewModel.searchResults.first(where: { $0.noteID == newValue })?.title
+                openTabs.noteOpened(newValue, knownTitle: knownTitle)
+            }
+            .sheet(isPresented: Binding(
+                get: { standalonePDFURL != nil },
+                set: { if !$0 { standalonePDFURL = nil } }
+            )) {
+                if let url = standalonePDFURL {
+                    PDFPreviewSheet(url: url, onClose: { standalonePDFURL = nil })
+                }
+            }
+    }
+
+    // body 하나에 modifier를 전부 이어 붙이면 Swift 타입 검사가 시간 초과로 실패해서
+    // 의미 단위(레이아웃 / 파일·편집 메뉴 / 탭 메뉴)로 나눠 둔다.
+    private var splitLayout: some View {
         NavigationSplitView {
             SidebarView(
                 viewModel: sidebarViewModel,
@@ -89,55 +116,68 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
         } detail: {
             VStack(spacing: 0) {
-                DiagnosticTestButton()
-                    .frame(height: 28)
-                EditorTabBarView(tabsViewModel: openTabs, activeNoteID: $noteListViewModel.selectedNoteID)
+                EditorTabBarView(
+                    tabsViewModel: openTabs,
+                    activeNoteID: $noteListViewModel.selectedNoteID,
+                    onNewTab: { Task { await noteListViewModel.createNote(folderID: currentFolderID) } }
+                )
                 Divider()
                 editorArea
             }
         }
-        .focusedSceneValue(\.newNoteAction) {
+    }
+
+    private func fileActions(on content: some View) -> some View {
+        content
+            .focusedSceneValue(\.newNoteAction) {
+                Task { await noteListViewModel.createNote(folderID: currentFolderID) }
+            }
+            .focusedSceneValue(\.newFolderAction) {
+                Task { await sidebarViewModel.createFolder(name: "새 폴더", parentID: currentFolderID) }
+            }
+            .focusedSceneValue(\.saveAction) {
+                Task {
+                    await workspace.primaryEditor.flush()
+                    if workspace.splitMode.isSplit { await workspace.secondaryEditor.flush() }
+                }
+            }
+            .focusedSceneValue(\.toggleHorizontalSplitAction) {
+                workspace.toggleHorizontalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
+            }
+            .focusedSceneValue(\.toggleVerticalSplitAction) {
+                workspace.toggleVerticalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
+            }
+            .focusedSceneValue(\.openPDFAction) { presentPDFOpenPanel() }
+    }
+
+    private func tabActions(on content: some View) -> some View {
+        content
+            .focusedSceneValue(\.newTabAction) {
+                Task { await noteListViewModel.createNote(folderID: currentFolderID) }
+            }
+            .focusedSceneValue(\.closeTabAction, noteListViewModel.selectedNoteID != nil ? {
+                if let id = noteListViewModel.selectedNoteID {
+                    noteListViewModel.selectedNoteID = openTabs.closeTab(id, activeNoteID: id)
+                }
+            } : nil)
+            .focusedSceneValue(\.previousTabAction) { selectAdjacentTab(-1) }
+            .focusedSceneValue(\.nextTabAction) { selectAdjacentTab(1) }
+    }
+
+    private func handleDeepLink(_ link: WidgetDeepLink?) {
+        guard let link else { return }
+        pendingDeepLink = nil
+        switch link {
+        case .openNote(let id):
+            noteListViewModel.selectedNoteID = id
+        case .newNote:
             Task { await noteListViewModel.createNote(folderID: currentFolderID) }
         }
-        .focusedSceneValue(\.newFolderAction) {
-            Task { await sidebarViewModel.createFolder(name: "새 폴더", parentID: currentFolderID) }
-        }
-        .focusedSceneValue(\.saveAction) {
-            Task {
-                await workspace.primaryEditor.flush()
-                if workspace.splitMode.isSplit { await workspace.secondaryEditor.flush() }
-            }
-        }
-        .focusedSceneValue(\.toggleHorizontalSplitAction) {
-            workspace.toggleHorizontalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
-        }
-        .focusedSceneValue(\.toggleVerticalSplitAction) {
-            workspace.toggleVerticalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
-        }
-        .focusedSceneValue(\.newTabAction) {
-            Task { await noteListViewModel.createNote(folderID: currentFolderID) }
-        }
-        .focusedSceneValue(\.closeTabAction, noteListViewModel.selectedNoteID != nil ? {
-            if let id = noteListViewModel.selectedNoteID {
-                noteListViewModel.selectedNoteID = openTabs.closeTab(id, activeNoteID: id)
-            }
-        } : nil)
-        .focusedSceneValue(\.openPDFAction) { presentPDFOpenPanel() }
-        .onChange(of: sidebarViewModel.selection) { _, _ in
-            noteListViewModel.selectedNoteID = nil
-        }
-        .onChange(of: noteListViewModel.selectedNoteID, initial: true) { _, newValue in
-            let knownTitle = noteListViewModel.notes.first(where: { $0.id == newValue })?.displayTitle
-                ?? noteListViewModel.searchResults.first(where: { $0.noteID == newValue })?.title
-            openTabs.noteOpened(newValue, knownTitle: knownTitle)
-        }
-        .sheet(isPresented: Binding(
-            get: { standalonePDFURL != nil },
-            set: { if !$0 { standalonePDFURL = nil } }
-        )) {
-            if let url = standalonePDFURL {
-                PDFPreviewSheet(url: url, onClose: { standalonePDFURL = nil })
-            }
+    }
+
+    private func selectAdjacentTab(_ offset: Int) {
+        if let id = openTabs.neighbor(of: noteListViewModel.selectedNoteID, offset: offset) {
+            noteListViewModel.selectedNoteID = id
         }
     }
 

@@ -54,6 +54,7 @@ struct EditorSelectionState: Decodable, Sendable, Equatable {
     var textColor: String?
     var fontSize: String?
     var fontFamily: String?
+    var highlightColor: String?
 }
 
 struct OpenExternalLinkPayload: Decodable {

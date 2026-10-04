@@ -5,8 +5,6 @@ import SwiftUI
 /// 이 뷰는 EditorViewModel.selection을 읽어 현재 활성 서식만 표시한다.
 struct EditorToolbar: View {
     @ObservedObject var viewModel: EditorViewModel
-    @State private var textColor = Color.primary
-    @State private var highlightColor = Color.yellow
     @State private var isShowingLinkPrompt = false
     @State private var linkURLText = ""
     @State private var isShowingFontSizePrompt = false
@@ -39,18 +37,18 @@ struct EditorToolbar: View {
 
                 Divider().frame(height: 16)
 
-                ColorPicker("텍스트 색상", selection: $textColor, supportsOpacity: false)
-                    .labelsHidden()
-                    .frame(width: 22)
-                    .onChange(of: textColor) { _, newValue in
-                        viewModel.perform(command: "setTextColor", args: ["color": newValue.hexString])
-                    }
-                ColorPicker("형광펜", selection: $highlightColor, supportsOpacity: false)
-                    .labelsHidden()
-                    .frame(width: 22)
-                    .onChange(of: highlightColor) { _, newValue in
-                        viewModel.perform(command: "setHighlight", args: ["color": newValue.hexString])
-                    }
+                ColorSplitButton(
+                    kind: .text,
+                    currentCSSColor: viewModel.selection.textColor,
+                    apply: { viewModel.perform(command: "setTextColor", args: ["color": $0]) },
+                    clear: { viewModel.perform(command: "unsetTextColor") }
+                )
+                ColorSplitButton(
+                    kind: .highlight,
+                    currentCSSColor: viewModel.selection.highlightColor,
+                    apply: { viewModel.perform(command: "setHighlight", args: ["color": $0]) },
+                    clear: { viewModel.perform(command: "unsetHighlight") }
+                )
 
                 Divider().frame(height: 16)
 
@@ -160,13 +158,24 @@ struct EditorToolbar: View {
                 }
             }
         } label: {
-            Label(viewModel.selection.fontFamily ?? "글꼴", systemImage: "textformat")
+            Label(Self.displayName(forFontFamily: viewModel.selection.fontFamily), systemImage: "textformat")
                 .lineLimit(1)
-                .frame(maxWidth: 90, alignment: .leading)
+                .truncationMode(.tail)
+                .frame(width: 104, alignment: .leading)
         }
         .menuStyle(.borderlessButton)
-        .help("글꼴")
+        .fixedSize()
+        .help(viewModel.selection.fontFamily ?? "글꼴")
         .accessibilityLabel("글꼴")
+    }
+
+    /// 붙여넣은 문서의 font-family는 `"Pretendard Variable", Pretendard, -apple-system, ...`처럼
+    /// CSS 대체 글꼴 목록 전체가 들어올 수 있다 — 툴바에는 맨 앞의 실제 글꼴 이름만 보여준다.
+    static func displayName(forFontFamily css: String?) -> String {
+        guard let css, !css.isEmpty else { return "글꼴" }
+        let first = css.split(separator: ",").first.map(String.init) ?? css
+        let name = first.trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
+        return name.isEmpty ? "글꼴" : name
     }
 
     /// "20pt" 같은 CSS 길이 문자열에서 숫자만 뽑아 낸다 — "직접 입력…"을 다시 열었을 때

@@ -46,7 +46,8 @@ final class AppEnvironment: ObservableObject {
         let noteUseCase = NoteUseCase(noteRepository: noteRepository, searchIndex: searchIndex)
 
         let folderAccessService = FolderAccessService()
-        folderAccessService.restoreAccessIfAvailable()
+        // 기다리지 않는다 — Keychain 접근 허용 창이 떠 있어도 앱 화면은 바로 보여야 한다.
+        Task { await folderAccessService.restoreAccessIfAvailable() }
         let oneDriveSyncUseCase = OneDriveSyncUseCase(
             noteRepository: noteRepository,
             syncStateRepository: syncStateRepository,
@@ -70,6 +71,9 @@ final class AppEnvironment: ObservableObject {
         )
 
         Task { try? await environment.noteUseCase.purgeExpiredTrash() }
+
+        await WidgetSnapshotService.shared.configure(database: database)
+        Task { await WidgetSnapshotService.shared.refresh() }
         return environment
     }
 }

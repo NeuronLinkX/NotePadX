@@ -13,5 +13,12 @@
     <!-- Phase 6 보안 스코프 북마크(OneDrive 동기화 폴더 재접근)에 필요 -->
     <key>com.apple.security.files.bookmarks.app-scope</key>
     <true/>
+    <!-- 홈 화면 위젯이 읽는 최근 메모 요약 JSON을 쓴다(WidgetSnapshotStore). 위젯은 별도 샌드박스
+         프로세스라 컨테이너 밖의 이 폴더로만 데이터를 주고받을 수 있다. 이 경로는
+         NotepadXWidget.entitlements, WidgetSnapshotStore.homeRelativePath와 같아야 한다. -->
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
+    <array>
+        <string>/Library/Application Support/NotepadXWidget/</string>
+    </array>
 </dict>
 </plist>

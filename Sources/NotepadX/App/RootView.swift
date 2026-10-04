@@ -6,11 +6,14 @@ struct RootView: View {
     @State private var environment: AppEnvironment?
     @State private var bootstrapError: AppError?
     @State private var isShowingMissingAPIKeyWarning = false
+    /// 위젯에서 앱이 막 켜지는 경우 URL 이벤트가 부트스트랩보다 먼저 오므로, ContentView가
+    /// 만들어질 때까지 라우터가 보관해 뒀다가 넘긴다.
+    @ObservedObject private var deepLinkRouter = WidgetDeepLinkRouter.shared
 
     var body: some View {
         Group {
             if let environment {
-                ContentView(environment: environment)
+                ContentView(environment: environment, pendingDeepLink: $deepLinkRouter.pending)
                     .environmentObject(environment)
             } else if let bootstrapError {
                 BootstrapErrorView(error: bootstrapError, retry: bootstrap)
@@ -36,7 +39,10 @@ struct RootView: View {
                 let bootstrapped = try await AppEnvironment.bootstrap()
                 environment = bootstrapped
                 // 스펙: 등록된 API 키(Keychain, 없으면 OPENAI_API_KEY 환경 변수)가 없으면 최초 진입 시 한 번 알린다.
-                isShowingMissingAPIKeyWarning = !LLMUseCase().hasAPIKey()
+                // Keychain 읽기는 접근 허용 창이 뜨면 사용자가 답할 때까지 멈추므로 메인
+                // 스레드가 아닌 곳에서 확인한다 — 창은 이미 떠 있어야 한다.
+                let hasKey = await Task.detached { LLMUseCase().hasAPIKey() }.value
+                isShowingMissingAPIKeyWarning = !hasKey
             } catch let error as AppError {
                 bootstrapError = error
             } catch {

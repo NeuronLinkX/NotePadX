@@ -18,9 +18,24 @@ final class FolderAccessService: ObservableObject {
     }
 
     /// 앱 시작 시 한 번 호출해 이전에 골라둔 폴더 접근 권한을 복원한다.
-    func restoreAccessIfAvailable() {
+    /// Keychain 읽기는 macOS의 접근 허용 창이 뜨면 사용자가 답할 때까지 멈추므로 메인 스레드가
+    /// 아닌 곳에서 하고, 결과(@Published)만 메인에서 반영한다 — 앱 창은 그동안에도 정상적으로 뜬다.
+    func restoreAccessIfAvailable() async {
+        let keychain = self.keychain
+        let key = Self.bookmarkKey
+        let loaded = await Task.detached { Result { try keychain.data(forKey: key) } }.value
+
+        let bookmarkData: Data
+        switch loaded {
+        case .failure:
+            needsReselection = true
+            return
+        case .success(let data):
+            guard let data else { return }
+            bookmarkData = data
+        }
+
         do {
-            guard let bookmarkData = try keychain.data(forKey: Self.bookmarkKey) else { return }
             var isStale = false
             let url = try URL(
                 resolvingBookmarkData: bookmarkData,

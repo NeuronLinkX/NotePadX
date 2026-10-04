@@ -107,6 +107,37 @@ final class OpenTabsViewModelTests: XCTestCase {
         XCTAssertEqual(tabs.openNoteIDs, [b, a])
     }
 
+    func testNeighborWrapsAroundBothEnds() async throws {
+        let (tabs, _) = try await makeTabs()
+        let a = UUID(), b = UUID(), c = UUID()
+        tabs.noteOpened(a, knownTitle: "A")
+        tabs.noteOpened(b, knownTitle: "B")
+        tabs.noteOpened(c, knownTitle: "C")
+
+        XCTAssertEqual(tabs.neighbor(of: a, offset: 1), b)
+        XCTAssertEqual(tabs.neighbor(of: c, offset: 1), a, "마지막 탭에서 다음은 첫 탭")
+        XCTAssertEqual(tabs.neighbor(of: a, offset: -1), c, "첫 탭에서 이전은 마지막 탭")
+    }
+
+    func testNeighborFallsBackToFirstTabWhenCurrentIsUnknown() async throws {
+        let (tabs, _) = try await makeTabs()
+        XCTAssertNil(tabs.neighbor(of: UUID(), offset: 1), "탭이 없으면 nil")
+        let a = UUID(), b = UUID()
+        tabs.noteOpened(a, knownTitle: "A")
+        tabs.noteOpened(b, knownTitle: "B")
+
+        XCTAssertEqual(tabs.neighbor(of: nil, offset: 1), a)
+        XCTAssertEqual(tabs.neighbor(of: UUID(), offset: -1), a)
+    }
+
+    func testTabWidthShrinksWithCountButStaysWithinBounds() {
+        XCTAssertEqual(EditorTabBarView.tabWidth(count: 1, available: 1200), EditorTabBarView.maxTabWidth)
+        let five = EditorTabBarView.tabWidth(count: 5, available: 700)
+        XCTAssertLessThan(five, EditorTabBarView.maxTabWidth)
+        XCTAssertGreaterThanOrEqual(five, EditorTabBarView.minTabWidth)
+        XCTAssertEqual(EditorTabBarView.tabWidth(count: 40, available: 700), EditorTabBarView.minTabWidth, "너무 많으면 최소폭에서 멈추고 스크롤")
+    }
+
     func testUpdateTitleOnlyAppliesToTabsThatAreStillOpen() async throws {
         let (tabs, _) = try await makeTabs()
         let openID = UUID()
