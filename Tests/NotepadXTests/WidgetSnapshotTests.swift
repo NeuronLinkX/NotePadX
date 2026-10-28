@@ -28,9 +28,12 @@ final class WidgetSnapshotTests: XCTestCase {
         var note = try await useCase.createNote(folderID: nil)
         note = useCase.applyEdit(to: note, title: title, documentJSON: Data("{}".utf8), plainText: body)
         note.updatedAt = updatedAt
+        try await useCase.save(note)
+        // 즐겨찾기·고정은 본문 저장이 아니라 전용 메서드로만 바뀐다.
+        if pinned { try await useCase.setPinned(id: note.id, isPinned: true) }
+        if favorite { try await useCase.setFavorite(id: note.id, isFavorite: true) }
         note.isPinned = pinned
         note.isFavorite = favorite
-        try await useCase.save(note)
         return note
     }
 
@@ -97,5 +100,58 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertFalse(note?.preview.contains("\n") ?? true)
         XCTAssertTrue(note?.preview.hasPrefix("첫 줄 둘째 줄") ?? false)
         XCTAssertLessThanOrEqual(note?.preview.count ?? 0, 121)
+    }
+}
+
+final class WidgetPrivacyTests: XCTestCase {
+    private var tempURL: URL!
+
+    override func setUpWithError() throws {
+        tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("NotepadXWidgetPrivacy-\(UUID().uuidString).sqlite")
+    }
+
+    override func tearDownWithError() throws {
+        for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: tempURL.path + suffix) }
+    }
+
+    private func makeDB() async throws -> DatabaseManager {
+        let db = try DatabaseManager(databaseURL: tempURL)
+        try await SchemaMigrator.migrate(db)
+        let useCase = NoteUseCase(noteRepository: SQLiteNoteRepository(db: db), searchIndex: SearchIndexService(db: db))
+        var note = try await useCase.createNote(folderID: nil)
+        note = useCase.applyEdit(to: note, title: "병원 예약", documentJSON: Data("{}".utf8), plainText: "민감한 본문 내용")
+        try await useCase.save(note)
+        return db
+    }
+
+    func testFullModeKeepsTitleAndPreview() async throws {
+        let snapshot = try await WidgetSnapshotService.makeSnapshot(from: try await makeDB(), privacy: .full)
+        XCTAssertEqual(snapshot.notes.first?.title, "병원 예약")
+        XCTAssertEqual(snapshot.notes.first?.preview, "민감한 본문 내용")
+        XCTAssertEqual(snapshot.privacy, .full)
+    }
+
+    func testTitlesModeNeverWritesTheBodyToTheSharedFile() async throws {
+        let snapshot = try await WidgetSnapshotService.makeSnapshot(from: try await makeDB(), privacy: .titles)
+        XCTAssertEqual(snapshot.notes.first?.title, "병원 예약")
+        XCTAssertEqual(snapshot.notes.first?.preview, "")
+        let json = String(decoding: try JSONEncoder().encode(snapshot), as: UTF8.self)
+        XCTAssertFalse(json.contains("민감한"), "숨기기로 한 본문이 공유 파일에 들어가면 안 된다")
+    }
+
+    func testHiddenModeWritesNoNotesAtAll() async throws {
+        let snapshot = try await WidgetSnapshotService.makeSnapshot(from: try await makeDB(), privacy: .hidden)
+        XCTAssertTrue(snapshot.notes.isEmpty)
+        let json = String(decoding: try JSONEncoder().encode(snapshot), as: UTF8.self)
+        XCTAssertFalse(json.contains("병원"))
+        XCTAssertEqual(snapshot.privacy, .hidden)
+    }
+
+    func testSnapshotFilesWrittenBeforePrivacyExistedStillDecode() throws {
+        let legacy = #"{"generatedAt":"2026-01-01T00:00:00Z","notes":[]}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(WidgetSnapshot.self, from: Data(legacy.utf8))
+        XCTAssertEqual(snapshot.privacy, .full)
     }
 }

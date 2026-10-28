@@ -18,6 +18,8 @@ private struct CloseTabActionKey: FocusedValueKey { typealias Value = () -> Void
 private struct PreviousTabActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct NextTabActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct OpenPDFActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct ImportFilesActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct ImportAppleNotesActionKey: FocusedValueKey { typealias Value = () -> Void }
 
 extension FocusedValues {
     var newNoteAction: (() -> Void)? {
@@ -72,6 +74,14 @@ extension FocusedValues {
         get { self[NextTabActionKey.self] }
         set { self[NextTabActionKey.self] = newValue }
     }
+    var importFilesAction: (() -> Void)? {
+        get { self[ImportFilesActionKey.self] }
+        set { self[ImportFilesActionKey.self] = newValue }
+    }
+    var importAppleNotesAction: (() -> Void)? {
+        get { self[ImportAppleNotesActionKey.self] }
+        set { self[ImportAppleNotesActionKey.self] = newValue }
+    }
     var openPDFAction: (() -> Void)? {
         get { self[OpenPDFActionKey.self] }
         set { self[OpenPDFActionKey.self] = newValue }
@@ -95,6 +105,8 @@ struct AppCommands: Commands {
     @FocusedValue(\.previousTabAction) private var previousTabAction
     @FocusedValue(\.nextTabAction) private var nextTabAction
     @FocusedValue(\.openPDFAction) private var openPDFAction
+    @FocusedValue(\.importFilesAction) private var importFilesAction
+    @FocusedValue(\.importAppleNotesAction) private var importAppleNotesAction
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -108,6 +120,9 @@ struct AppCommands: Commands {
 
             // 브라우저 스타일 탭 (스펙: 다중 탭 지원). Ctrl+T/Ctrl+W는 Windows 관례라
             // macOS 관례인 Cmd+T/Cmd+W로 바꿨다.
+            Button("Quick Note…") { QuickCaptureController.shared.show() }
+                .keyboardShortcut("n", modifiers: [.control, .option])
+
             Button("New Tab") { newTabAction?() }
                 .keyboardShortcut("t", modifiers: .command)
                 .disabled(newTabAction == nil)
@@ -131,6 +146,13 @@ struct AppCommands: Commands {
             Button("Open PDF…") { openPDFAction?() }
                 .keyboardShortcut("o", modifiers: .command)
                 .disabled(openPDFAction == nil)
+
+            // 다른 앱에서 쓰던 글을 새 메모로 들여온다(기존 메모는 건드리지 않는다).
+            Button("Import Files…") { importFilesAction?() }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+                .disabled(importFilesAction == nil)
+            Button("Import from Apple Notes…") { importAppleNotesAction?() }
+                .disabled(importAppleNotesAction == nil)
         }
 
         CommandGroup(after: .saveItem) {

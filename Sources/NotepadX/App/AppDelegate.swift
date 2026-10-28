@@ -32,10 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 사용자가 다른 앱/바탕화면으로 넘어가는 순간이 위젯을 보게 되는 순간이므로, 저장을
     /// 마친 직후 위젯용 최근 메모 요약도 같이 갱신한다.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        Task { @MainActor in NoteLockSession.shared.appDidBecomeActive() }
+    }
+
     func applicationWillResignActive(_ notification: Notification) {
         Task { @MainActor in
+            NoteLockSession.shared.appDidResignActive()
             await SaveCoordinator.shared.flushAll()
-            await WidgetSnapshotService.shared.refresh()
+            await ExternalSurfaces.refresh()
         }
     }
 
@@ -43,10 +48,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         Task { @MainActor in
             await SaveCoordinator.shared.flushAll()
-            await WidgetSnapshotService.shared.refresh()
+            await ExternalSurfaces.refresh()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+
+    /// Spotlight에서 메모를 눌러 열었을 때.
+    func application(_ application: NSApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void) -> Bool {
+        guard let id = SpotlightIndexService.noteID(from: userActivity) else { return false }
+        Task { @MainActor in
+            WidgetDeepLinkRouter.shared.pending = .openNote(id)
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
+        }
+        return true
     }
 
     func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {

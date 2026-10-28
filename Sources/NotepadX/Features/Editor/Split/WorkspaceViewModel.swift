@@ -16,13 +16,13 @@ final class WorkspaceViewModel: ObservableObject {
     init(noteUseCase: NoteUseCase, tagUseCase: TagUseCase, revisionUseCase: NoteRevisionUseCase) {
         self.primaryEditor = EditorViewModel(noteUseCase: noteUseCase, tagUseCase: tagUseCase, revisionUseCase: revisionUseCase)
         self.secondaryEditor = EditorViewModel(noteUseCase: noteUseCase, tagUseCase: tagUseCase, revisionUseCase: revisionUseCase)
-        let storedRatio = UserDefaults.standard.double(forKey: Self.splitRatioDefaultsKey)
+        let storedRatio = AppConfig.defaults.double(forKey: Self.splitRatioDefaultsKey)
         self.splitRatio = storedRatio > 0 ? storedRatio : 0.5
     }
 
     func setSplitRatio(_ value: Double) {
         splitRatio = value
-        UserDefaults.standard.set(value, forKey: Self.splitRatioDefaultsKey)
+        AppConfig.defaults.set(value, forKey: Self.splitRatioDefaultsKey)
     }
 
     func toggleHorizontalSplit(primaryNoteID: UUID?) {

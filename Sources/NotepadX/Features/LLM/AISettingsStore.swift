@@ -6,7 +6,7 @@ struct AISettingsStore: Sendable {
     private static let settingsDefaultsKey = "NotepadX.aiSettings"
 
     func loadSettings() -> AISettings {
-        guard let data = UserDefaults.standard.data(forKey: Self.settingsDefaultsKey),
+        guard let data = AppConfig.defaults.data(forKey: Self.settingsDefaultsKey),
               let decoded = try? JSONDecoder().decode(AISettings.self, from: data) else {
             return AISettings()
         }
@@ -15,6 +15,6 @@ struct AISettingsStore: Sendable {
 
     func save(_ settings: AISettings) {
         guard let data = try? JSONEncoder().encode(settings) else { return }
-        UserDefaults.standard.set(data, forKey: Self.settingsDefaultsKey)
+        AppConfig.defaults.set(data, forKey: Self.settingsDefaultsKey)
     }
 }

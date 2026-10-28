@@ -151,3 +151,86 @@ final class OpenTabsViewModelTests: XCTestCase {
         XCTAssertNil(tabs.titles[closedID])
     }
 }
+
+@MainActor
+final class OpenTabsRestoreTests: XCTestCase {
+    private var tempURL: URL!
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUpWithError() throws {
+        tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("NotepadXTabsRestore-\(UUID().uuidString).sqlite")
+        suiteName = "NotepadXTabsRestore-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
+
+    override func tearDownWithError() throws {
+        for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: tempURL.path + suffix) }
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    private func makeUseCase() async throws -> NoteUseCase {
+        let db = try DatabaseManager(databaseURL: tempURL)
+        try await SchemaMigrator.migrate(db)
+        return NoteUseCase(noteRepository: SQLiteNoteRepository(db: db), searchIndex: SearchIndexService(db: db))
+    }
+
+    func testTabsAndActiveNoteSurviveARelaunch() async throws {
+        let useCase = try await makeUseCase()
+        let a = try await useCase.createNote(folderID: nil)
+        let b = try await useCase.createNote(folderID: nil)
+        let c = try await useCase.createNote(folderID: nil)
+
+        let session1 = OpenTabsViewModel(noteUseCase: useCase, defaults: defaults)
+        [a, b, c].forEach { session1.noteOpened($0.id, knownTitle: $0.displayTitle) }
+        session1.moveTab(from: 2, to: 0)          // 순서 변경도 기억돼야 한다
+        session1.rememberActive(b.id)
+
+        let session2 = OpenTabsViewModel(noteUseCase: useCase, defaults: defaults)
+        // 앱이 켜지면서 첫 메모가 자동 선택돼 탭 목록을 덮어쓰는 상황을 흉내 낸다.
+        session2.noteOpened(a.id, knownTitle: "자동 선택")
+        let active = await session2.restore()
+
+        XCTAssertEqual(session2.openNoteIDs, [c.id, a.id, b.id])
+        XCTAssertEqual(active, b.id)
+    }
+
+    func testDeletedAndTrashedNotesAreSkippedOnRestore() async throws {
+        let useCase = try await makeUseCase()
+        let keep = try await useCase.createNote(folderID: nil)
+        let trashed = try await useCase.createNote(folderID: nil)
+        let session1 = OpenTabsViewModel(noteUseCase: useCase, defaults: defaults)
+        session1.noteOpened(trashed.id, knownTitle: "t")
+        session1.noteOpened(keep.id, knownTitle: "k")
+        session1.noteOpened(UUID(), knownTitle: "존재하지 않음")
+        session1.rememberActive(trashed.id)
+        try await useCase.moveToTrash(id: trashed.id)
+
+        let session2 = OpenTabsViewModel(noteUseCase: useCase, defaults: defaults)
+        let active = await session2.restore()
+
+        XCTAssertEqual(session2.openNoteIDs, [keep.id])
+        XCTAssertEqual(active, keep.id, "마지막에 보던 메모가 사라졌으면 첫 탭으로")
+    }
+
+    func testRestoreWithNothingSavedReturnsNilAndLeavesTabsAlone() async throws {
+        let useCase = try await makeUseCase()
+        let session = OpenTabsViewModel(noteUseCase: useCase, defaults: defaults)
+        let active = await session.restore()
+        XCTAssertNil(active)
+        XCTAssertTrue(session.openNoteIDs.isEmpty)
+    }
+
+    func testRememberActiveIgnoresNilSoTheSavedTabIsNotLost() async throws {
+        let useCase = try await makeUseCase()
+        let note = try await useCase.createNote(folderID: nil)
+        let session1 = OpenTabsViewModel(noteUseCase: useCase, defaults: defaults)
+        session1.noteOpened(note.id, knownTitle: "x")
+        session1.rememberActive(note.id)
+        session1.rememberActive(nil)   // 시작 직후 잠깐 선택 없음
+
+        let session2 = OpenTabsViewModel(noteUseCase: useCase, defaults: defaults)
+        let active = await session2.restore()
+        XCTAssertEqual(active, note.id)
+    }
+}

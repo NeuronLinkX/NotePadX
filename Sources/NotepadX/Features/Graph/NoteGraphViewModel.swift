@@ -71,7 +71,8 @@ final class NoteGraphViewModel: ObservableObject {
         defer { isComputing = false }
         do {
             let notes = try await noteUseCase.fetchNotes(filter: .all, sortOrder: .updatedDescending)
-            let candidates = notes.prefix(NoteSimilarityEngine.maxNotes)
+            // 잠긴 메모는 연관 그래프에 넣지 않는다 — 내용 유사도로 이어진 선만으로도 무엇과 비슷한지 드러난다.
+            let candidates = notes.filter { !$0.isLocked }.prefix(NoteSimilarityEngine.maxNotes)
                 .filter { !$0.plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             let edges = NoteSimilarityEngine.buildGraph(notes: candidates.map { ($0.id, $0.plainText) })
             let connectedIDs = Set(edges.flatMap { [$0.from, $0.to] })

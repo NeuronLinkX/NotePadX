@@ -5,6 +5,7 @@ struct RecentNotesEntry: TimelineEntry {
     let date: Date
     /// nil이면 앱이 아직 한 번도 요약을 내보내지 않은 상태(앱을 처음 실행하기 전)다.
     let notes: [WidgetNoteSummary]?
+    var privacy: WidgetPrivacyMode = .full
 }
 
 struct RecentNotesProvider: TimelineProvider {
@@ -23,7 +24,8 @@ struct RecentNotesProvider: TimelineProvider {
     }
 
     private func loadEntry() -> RecentNotesEntry {
-        RecentNotesEntry(date: Date(), notes: WidgetSnapshotStore.read()?.notes)
+        let snapshot = WidgetSnapshotStore.read()
+        return RecentNotesEntry(date: Date(), notes: snapshot?.notes, privacy: snapshot?.privacy ?? .full)
     }
 
     private static let sampleNotes: [WidgetNoteSummary] = [
@@ -75,7 +77,14 @@ struct RecentNotesWidgetView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let notes = entry.notes {
+        if entry.privacy == .hidden {
+            VStack(alignment: .leading, spacing: 6) {
+                Image(systemName: "lock.fill").foregroundStyle(.secondary)
+                Text("메모 내용은 위젯에 표시하지 않도록 설정되어 있습니다")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } else if let notes = entry.notes {
             if notes.isEmpty {
                 Text("메모가 없습니다")
                     .font(.footnote)

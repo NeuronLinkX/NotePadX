@@ -10,7 +10,7 @@ set -euo pipefail
 #   2) xcodebuild archive로 .app 빌드/서명
 #   3) .app + /Applications 심볼릭 링크를 담은 DMG 생성
 #
-# 배포 전 반드시 알아야 할 것 (README "11. Notarization(공증) 절차" 참고):
+# 배포 전 반드시 알아야 할 것 (README "서명·공증·업데이트"와 Scripts/notarize.sh 참고):
 #   - project.yml의 DEVELOPMENT_TEAM이 비어 있으면(기본값) ad-hoc 서명만 되고,
 #     이 DMG를 내려받은 다른 사람의 Mac에서는 Gatekeeper가 "확인되지 않은 개발자"
 #     경고를 띄우거나 아예 실행을 막는다.
@@ -62,7 +62,7 @@ codesign -dv "$APP_PATH" 2>&1 | grep -E "flags|Authority" || true
 if spctl -a -vvv "$APP_PATH" 2>&1; then
   echo "  Gatekeeper: accepted (공증 완료된 것으로 보임)"
 else
-  echo "  Gatekeeper: rejected — Developer ID 서명 + notarize + staple 전이면 정상. 배포 전 README 11절을 따르세요."
+  echo "  Gatekeeper: rejected — Developer ID 서명 + notarize + staple 전이면 정상. 배포 전 README "서명·공증·업데이트"를 따르세요."
 fi
 
 echo ""

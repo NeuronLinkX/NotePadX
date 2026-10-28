@@ -12,9 +12,39 @@ struct WidgetNoteSummary: Codable, Equatable, Identifiable, Sendable {
     let isPinned: Bool
 }
 
+/// 바탕화면 위젯이 메모에서 얼마나 보여줄지. 위젯은 잠금 화면에서도 보일 수 있어서 사용자가 고른다.
+enum WidgetPrivacyMode: String, Codable, CaseIterable, Sendable {
+    case full      // 제목 + 본문 미리보기
+    case titles    // 제목만
+    case hidden    // 아무것도 보여주지 않음
+
+    var label: String {
+        switch self {
+        case .full: return "제목과 미리보기"
+        case .titles: return "제목만"
+        case .hidden: return "표시 안 함"
+        }
+    }
+}
+
 struct WidgetSnapshot: Codable, Equatable, Sendable {
     let generatedAt: Date
     let notes: [WidgetNoteSummary]
+    let privacy: WidgetPrivacyMode
+
+    init(generatedAt: Date, notes: [WidgetNoteSummary], privacy: WidgetPrivacyMode = .full) {
+        self.generatedAt = generatedAt
+        self.notes = notes
+        self.privacy = privacy
+    }
+
+    // 이 필드가 생기기 전에 앱이 써 둔 파일도 읽을 수 있어야 한다(없으면 .full).
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        notes = try container.decode([WidgetNoteSummary].self, forKey: .notes)
+        privacy = try container.decodeIfPresent(WidgetPrivacyMode.self, forKey: .privacy) ?? .full
+    }
 }
 
 /// 위젯은 별도 샌드박스 프로세스라 앱 컨테이너의 DB를 열 수 없다. 앱이 최근 메모 요약만

@@ -20,5 +20,11 @@
     <array>
         <string>/Library/Application Support/NotepadXWidget/</string>
     </array>
+    <!-- 파일 > Apple 메모에서 가져오기: 메모 앱에 AppleScript로 메모 본문을 묻는다(읽기 전용).
+         사용자가 처음 쓸 때 macOS가 자동화 권한을 따로 물어본다. -->
+    <key>com.apple.security.temporary-exception.apple-events</key>
+    <array>
+        <string>com.apple.Notes</string>
+    </array>
 </dict>
 </plist>

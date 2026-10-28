@@ -23,6 +23,9 @@ struct EditorView: View {
     @State private var isShowingRevisionHistory = false
     @State private var isShowingExport = false
     @State private var noteGraphWindowPresenter = NoteGraphWindowPresenter()
+    @ObservedObject private var lockSession = NoteLockSession.shared
+    /// 목록에서 잠금이 바뀌었을 때 다시 그리게 하는 용도(편집기가 들고 있는 note는 @Published가 아니다).
+    @State private var lockRevision = 0
     @StateObject private var llmPanelViewModel: LLMPanelViewModel
 
     init(
@@ -64,10 +67,10 @@ struct EditorView: View {
                 }
             }
         let withFocusedActions = withSheets
-            .focusedSceneValue(\.exportAction, (viewModel.note != nil && !isDiagramNote) ? { isShowingExport = true } : nil)
-            .focusedSceneValue(\.findAction, (viewModel.note != nil && !isDiagramNote) ? { viewModel.toggleFind() } : nil)
-            .focusedSceneValue(\.replaceAction, (viewModel.note != nil && !isDiagramNote) ? { viewModel.toggleReplace() } : nil)
-            .focusedSceneValue(\.goToLineAction, (viewModel.note != nil && !isDiagramNote) ? { viewModel.toggleGoToLine() } : nil)
+            .focusedSceneValue(\.exportAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { isShowingExport = true } : nil)
+            .focusedSceneValue(\.findAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { viewModel.toggleFind() } : nil)
+            .focusedSceneValue(\.replaceAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { viewModel.toggleReplace() } : nil)
+            .focusedSceneValue(\.goToLineAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { viewModel.toggleGoToLine() } : nil)
         return withFocusedActions
             .task(id: noteID) {
                 await viewModel.load(noteID: noteID)
@@ -80,6 +83,11 @@ struct EditorView: View {
                 if let newValue, !newValue.isEmpty {
                     viewModel.highlightSearchMatches(newValue)
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .noteLockChanged)) { notification in
+                guard let id = notification.userInfo?["id"] as? UUID, let locked = notification.userInfo?["isLocked"] as? Bool else { return }
+                viewModel.applyLockChange(id: id, isLocked: locked)
+                lockRevision += 1
             }
             .onAppear { viewModel.applyTheme(isDark: colorScheme == .dark) }
             .onChange(of: colorScheme) { _, newValue in viewModel.applyTheme(isDark: newValue == .dark) }
@@ -102,13 +110,17 @@ struct EditorView: View {
 
     private var mainStack: some View {
         HStack(spacing: 0) {
-            if viewModel.isShowingOutline, viewModel.note != nil {
+            if viewModel.isShowingOutline, viewModel.note != nil, !isLockedOut {
                 DocumentOutlineView(viewModel: viewModel)
                 Divider()
             }
 
             Group {
-                if let note = viewModel.note, note.kind == .diagram {
+                if let note = viewModel.note, isLockedOut {
+                    LockedNoteView(title: note.displayTitle) {
+                        await lockSession.unlock(note.id, reason: "‘\(note.displayTitle)’ 메모를 엽니다")
+                    }
+                } else if let note = viewModel.note, note.kind == .diagram {
                     VStack(spacing: 0) {
                         paneHeader
                         Divider()
@@ -169,7 +181,7 @@ struct EditorView: View {
             }
             .frame(maxWidth: .infinity)
 
-            if llmPanelViewModel.isVisible {
+            if llmPanelViewModel.isVisible, !isLockedOut {
                 Divider()
                 LLMPanelView(viewModel: llmPanelViewModel)
             }
@@ -177,6 +189,13 @@ struct EditorView: View {
     }
 
     private var isDiagramNote: Bool { viewModel.note?.kind == .diagram }
+
+    /// 잠긴 메모이고 아직 인증을 통과하지 않았으면 내용(편집기·개요·AI 패널·내보내기)을 전부 막는다.
+    private var isLockedOut: Bool {
+        _ = lockRevision
+        guard let note = viewModel.note else { return false }
+        return note.isLocked && !lockSession.isUnlocked(note.id)
+    }
 
     private var paneHeader: some View {
         HStack(spacing: 10) {

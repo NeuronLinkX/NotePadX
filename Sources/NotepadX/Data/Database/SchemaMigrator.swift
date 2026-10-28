@@ -110,7 +110,35 @@ enum SchemaMigrator {
         SchemaMigration(version: 4, statements: [
             "ALTER TABLE note ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';",
         ]),
+        // v5: 버전 기록의 이미지 중복 저장 해소. 붙여넣은 이미지는 노트 문서 안에 base64로 들어 있어서,
+        // 버전 기록이 매번 문서 전체를 복사하면 같은 이미지가 최대 20벌씩 쌓였다. 이제 버전 기록에는
+        // 이미지 대신 해시 참조만 두고, 실제 이미지는 이 테이블에 한 번만 (압축해서) 저장한다.
+        SchemaMigration(version: 5, statements: [
+            """
+            CREATE TABLE IF NOT EXISTS revision_blob (
+                hash TEXT PRIMARY KEY NOT NULL,
+                data BLOB NOT NULL,
+                original_length INTEGER NOT NULL
+            );
+            """,
+        ]),
+        // v6: 메모 잠금. 목록 미리보기·검색 본문·위젯·연관 그래프에서 내용을 감추고, 열 때 Touch ID/암호를 요구한다.
+        SchemaMigration(version: 6, statements: [
+            "ALTER TABLE note ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0;",
+        ]),
     ]
+
+    /// 이미 데이터가 있는 DB에 적용 안 된 마이그레이션이 있는지 확인한다 — 새로 만든 빈 DB는
+    /// 지킬 데이터가 없으므로 (nil, ...)이 아니라 `hasExistingData == false`로 돌려준다.
+    static func pendingState(_ db: DatabaseManager) async throws -> (hasExistingData: Bool, pendingCount: Int) {
+        let tables = try await db.query(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version';"
+        ) { $0.string(0) }
+        guard !tables.isEmpty else { return (false, migrations.count) }
+        let versions = try await db.query("SELECT MAX(version) AS v FROM schema_version;") { $0.int(0) ?? 0 }
+        let current = versions.first ?? 0
+        return (true, migrations.filter { $0.version > current }.count)
+    }
 
     static func migrate(_ db: DatabaseManager) async throws {
         try await db.execute("""

@@ -113,6 +113,17 @@ struct NoteUseCase: Sendable {
         try await noteRepository.setFavorite(id: id, isFavorite: isFavorite)
     }
 
+    func setPinned(id: UUID, isPinned: Bool) async throws {
+        try await noteRepository.setPinned(id: id, isPinned: isPinned)
+    }
+
+    /// 잠그면 검색 색인에서 본문을 빼고(제목만 남김), 풀면 다시 넣는다 — 잠긴 메모의 내용이 검색
+    /// 결과 발췌문으로 새어 나가지 않게 하기 위해서다.
+    func setLocked(id: UUID, isLocked: Bool) async throws {
+        try await noteRepository.setLocked(id: id, isLocked: isLocked)
+        try await searchIndex.reindexNote(id: id)
+    }
+
     /// 메모 목록 → 사이드바 폴더 드래그 앤 드롭에서 호출한다.
     func moveNote(id: UUID, toFolderID folderID: UUID?) async throws {
         try await noteRepository.moveNote(id: id, toFolderID: folderID)

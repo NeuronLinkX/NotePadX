@@ -23,14 +23,33 @@ final class NoteListViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
     private var currentFilter: NoteListFilter = .all
 
+    private var externalChangeObserver: NSObjectProtocol?
+
     init(noteUseCase: NoteUseCase, tagUseCase: TagUseCase, searchUseCase: SearchUseCase) {
         self.noteUseCase = noteUseCase
         self.tagUseCase = tagUseCase
         self.searchUseCase = searchUseCase
+        // 빠른 메모·단축어처럼 메인 창 밖에서 메모가 생기면 목록을 다시 불러온다.
+        externalChangeObserver = NotificationCenter.default.addObserver(forName: .notesChangedExternally, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                Task { await self.load(filter: self.currentFilter) }
+            }
+        }
+    }
+
+    deinit {
+        if let externalChangeObserver { NotificationCenter.default.removeObserver(externalChangeObserver) }
     }
 
     var isSearching: Bool {
         !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// 가져오기처럼 밖에서 메모가 한꺼번에 생긴 뒤: 목록을 다시 불러오고 첫 메모를 연다.
+    func showImported(_ ids: [UUID]) async {
+        await load(filter: currentFilter)
+        if let first = ids.first { selectedNoteID = first }
     }
 
     func load(filter: NoteListFilter) async {
@@ -81,7 +100,12 @@ final class NoteListViewModel: ObservableObject {
     /// 도중에 목록 순서가 갑자기 바뀌며 시선을 뺏기지 않게 한다.
     func applyExternalUpdate(_ note: Note) {
         guard let index = notes.firstIndex(where: { $0.id == note.id }) else { return }
-        notes[index] = note
+        // 편집기가 저장한 복사본은 열 때 읽어 둔 즐겨찾기·고정 값을 갖고 있을 수 있다 — 목록이 아는
+        // 최신 값을 덮어쓰면 별표/핀이 화면에서만 사라진다.
+        var updated = note
+        updated.isFavorite = notes[index].isFavorite
+        updated.isPinned = notes[index].isPinned
+        notes[index] = updated
     }
 
     func toggleFavorite(_ note: Note) async {
@@ -90,6 +114,36 @@ final class NoteListViewModel: ObservableObject {
             if let index = notes.firstIndex(where: { $0.id == note.id }) {
                 notes[index].isFavorite.toggle()
             }
+        } catch {
+            report(error)
+        }
+    }
+
+    /// 메모 잠금/해제. 잠그는 건 바로 되지만, 풀 때는 Touch ID/암호 인증을 거친다. 목록에서 바꿔도
+    /// 이미 열려 있는 편집기가 곧바로 잠김 화면으로 바뀌도록 알림을 보낸다.
+    func toggleLocked(_ note: Note) async {
+        let session = NoteLockSession.shared
+        let willLock = !note.isLocked
+        do {
+            if !willLock {
+                guard await session.authenticate(reason: "‘\(note.displayTitle)’ 메모의 잠금을 해제합니다") else { return }
+            }
+            await SaveCoordinator.shared.flushAll()   // 열려 있던 편집 내용이 잠그기 전에 저장되게
+            try await noteUseCase.setLocked(id: note.id, isLocked: willLock)
+            session.forget(note.id)
+            NotificationCenter.default.post(name: .noteLockChanged, object: nil, userInfo: ["id": note.id, "isLocked": willLock])
+            await load(filter: currentFilter)
+        } catch {
+            report(error)
+        }
+    }
+
+    /// 목록 맨 위에 고정/해제한다. 해제했을 때 원래 날짜 순서 자리로 돌아가야 해서, 화면의 배열을
+    /// 직접 주무르지 않고 DB의 정렬 규칙(고정 우선 → 최신순)으로 다시 불러온다. 선택은 유지된다.
+    func togglePinned(_ note: Note) async {
+        do {
+            try await noteUseCase.setPinned(id: note.id, isPinned: !note.isPinned)
+            await load(filter: currentFilter)
         } catch {
             report(error)
         }

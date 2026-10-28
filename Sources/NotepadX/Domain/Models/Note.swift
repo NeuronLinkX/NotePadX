@@ -40,6 +40,8 @@ struct Note: Identifiable, Codable, Sendable, Equatable {
     var contentHash: String
     var syncState: SyncState
     var kind: NoteKind
+    /// 잠긴 메모는 목록 미리보기·검색 본문·위젯에서 내용을 숨기고, 열 때 인증을 요구한다(암호화는 아니다).
+    var isLocked: Bool
 
     var isDeleted: Bool { deletedAt != nil }
 
@@ -57,7 +59,8 @@ struct Note: Identifiable, Codable, Sendable, Equatable {
         source: NoteSource = .local,
         contentHash: String,
         syncState: SyncState = .notSynced,
-        kind: NoteKind = .text
+        kind: NoteKind = .text,
+        isLocked: Bool = false
     ) {
         self.id = id
         self.folderID = folderID
@@ -73,6 +76,7 @@ struct Note: Identifiable, Codable, Sendable, Equatable {
         self.contentHash = contentHash
         self.syncState = syncState
         self.kind = kind
+        self.isLocked = isLocked
     }
 }
 
@@ -84,6 +88,7 @@ extension Note {
 
     /// 노트 목록 미리보기용 한 줄 발췌.
     var previewText: String {
+        if isLocked { return "" }
         let collapsed = plainText
             .replacingOccurrences(of: "\n", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)

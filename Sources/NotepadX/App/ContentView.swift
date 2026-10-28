@@ -12,10 +12,13 @@ struct ContentView: View {
     @StateObject private var noteGraphViewModel: NoteGraphViewModel
     @ObservedObject private var oneDriveViewModel: OneDriveViewModel
     @State private var standalonePDFURL: URL?
+    @State private var importSummary: ImportSummary?
+    private let importService: NoteImportService
     @Binding private var pendingDeepLink: WidgetDeepLink?
 
     init(environment: AppEnvironment, pendingDeepLink: Binding<WidgetDeepLink?>) {
         _pendingDeepLink = pendingDeepLink
+        importService = NoteImportService(noteUseCase: environment.noteUseCase)
         let sidebar = SidebarViewModel(
             folderUseCase: environment.folderUseCase,
             tagUseCase: environment.tagUseCase
@@ -72,6 +75,17 @@ struct ContentView: View {
 
     var body: some View {
         tabActions(on: fileActions(on: splitLayout))
+            .task {
+                // 지난번에 열어 둔 탭을 되살리고, 마지막에 보던 메모를 다시 선택한다.
+                if let active = await openTabs.restore() {
+                    noteListViewModel.selectedNoteID = active
+                }
+                // 화면 점검용: 격리 프로필에서만, 환경 변수로 준 파일을 시작하자마자 가져온다.
+                if AppConfig.isIsolatedProfile,
+                   let paths = ProcessInfo.processInfo.environment["NOTEPADX_IMPORT_ON_LAUNCH"] {
+                    runImport(urls: paths.split(separator: ":").map { URL(fileURLWithPath: String($0)) })
+                }
+            }
             .onChange(of: pendingDeepLink, initial: true) { _, link in
                 handleDeepLink(link)
             }
@@ -82,6 +96,15 @@ struct ContentView: View {
                 let knownTitle = noteListViewModel.notes.first(where: { $0.id == newValue })?.displayTitle
                     ?? noteListViewModel.searchResults.first(where: { $0.noteID == newValue })?.title
                 openTabs.noteOpened(newValue, knownTitle: knownTitle)
+                openTabs.rememberActive(newValue)
+            }
+            .alert("가져오기 결과", isPresented: Binding(
+                get: { importSummary != nil },
+                set: { if !$0 { importSummary = nil } }
+            )) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(importSummary?.message ?? "")
             }
             .sheet(isPresented: Binding(
                 get: { standalonePDFURL != nil },
@@ -148,6 +171,8 @@ struct ContentView: View {
                 workspace.toggleVerticalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
             }
             .focusedSceneValue(\.openPDFAction) { presentPDFOpenPanel() }
+            .focusedSceneValue(\.importFilesAction) { presentImportPanel() }
+            .focusedSceneValue(\.importAppleNotesAction) { importFromAppleNotes() }
     }
 
     private func tabActions(on content: some View) -> some View {
@@ -182,6 +207,37 @@ struct ContentView: View {
     }
 
     /// File > Open PDF… (스펙: Office Viewer). 노트에 첨부하지 않고도 디스크의 임의 PDF를 바로 본다.
+    private func presentImportPanel() {
+        let panel = NSOpenPanel()
+        panel.title = "가져올 파일 선택"
+        panel.message = "Markdown(.md), 텍스트(.txt), Word(.docx) 파일을 새 메모로 가져옵니다."
+        panel.allowedContentTypes = NoteImportService.supportedExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        runImport(urls: panel.urls)
+    }
+
+    private func runImport(urls: [URL]) {
+        Task {
+            let summary = await importService.importFiles(urls, folderID: currentFolderID)
+            await finishImport(summary)
+        }
+    }
+
+    private func importFromAppleNotes() {
+        Task {
+            let summary = await importService.importAppleNotes(fetcher: SystemAppleNotesFetcher(), folderID: currentFolderID)
+            await finishImport(summary)
+        }
+    }
+
+    private func finishImport(_ summary: ImportSummary) async {
+        await noteListViewModel.showImported(summary.importedIDs)
+        // 모두 잘 끝났고 경고도 없으면 조용히 새 메모를 연다. 실패나 건너뛴 요소가 있을 때만 알림을 띄운다.
+        if !summary.failures.isEmpty || !summary.warnings.isEmpty { importSummary = summary }
+    }
+
     private func presentPDFOpenPanel() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]

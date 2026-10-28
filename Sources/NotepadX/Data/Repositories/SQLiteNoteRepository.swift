@@ -9,7 +9,7 @@ struct SQLiteNoteRepository: NoteRepository {
 
     private static let selectColumns = """
         id, folder_id, title, document_json, plain_text, created_at, updated_at, \
-        deleted_at, is_favorite, is_pinned, source, content_hash, sync_state, kind
+        deleted_at, is_favorite, is_pinned, source, content_hash, sync_state, kind, is_locked
         """
 
     private func mapRow(_ row: StatementRow) throws -> Note {
@@ -29,6 +29,7 @@ struct SQLiteNoteRepository: NoteRepository {
         let contentHash = row.string(11) ?? ""
         let syncState = SyncState(rawValue: row.string(12) ?? "") ?? .notSynced
         let kind = NoteKind(rawValue: row.string(13) ?? "") ?? .text
+        let isLocked = row.bool(14) ?? false
 
         return Note(
             id: id,
@@ -44,7 +45,8 @@ struct SQLiteNoteRepository: NoteRepository {
             source: source,
             contentHash: contentHash,
             syncState: syncState,
-            kind: kind
+            kind: kind,
+            isLocked: isLocked
         )
     }
 
@@ -64,6 +66,7 @@ struct SQLiteNoteRepository: NoteRepository {
             .text(note.contentHash),
             .text(note.syncState.rawValue),
             .text(note.kind.rawValue),
+            .int(note.isLocked ? 1 : 0),
         ]
     }
 
@@ -110,15 +113,18 @@ struct SQLiteNoteRepository: NoteRepository {
     func createNote(_ note: Note) async throws {
         let sql = """
             INSERT INTO note (\(Self.selectColumns)) \
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
         try await db.execute(sql, bindings(for: note))
     }
 
+    // 즐겨찾기·고정은 목록에서 전용 메서드(setFavorite/setPinned)로만 바꾸는 값이라 여기서는 쓰지 않는다.
+    // 편집기는 열 때 읽어 둔 복사본으로 저장하므로, 이 값까지 되쓰면 그사이 목록에서 바꾼 상태가
+    // 다음 자동 저장 때 조용히 되돌려진다.
     func updateNote(_ note: Note) async throws {
         let sql = """
             UPDATE note SET folder_id = ?, title = ?, document_json = ?, plain_text = ?, \
-            updated_at = ?, deleted_at = ?, is_favorite = ?, is_pinned = ?, source = ?, \
+            updated_at = ?, deleted_at = ?, source = ?, \
             content_hash = ?, sync_state = ?, kind = ? WHERE id = ?;
             """
         let params: [DatabaseValue] = [
@@ -128,8 +134,6 @@ struct SQLiteNoteRepository: NoteRepository {
             .text(note.plainText),
             .double(note.updatedAt.timeIntervalSince1970),
             note.deletedAt.map { .double($0.timeIntervalSince1970) } ?? .null,
-            .int(note.isFavorite ? 1 : 0),
-            .int(note.isPinned ? 1 : 0),
             .text(note.source.rawValue),
             .text(note.contentHash),
             .text(note.syncState.rawValue),
@@ -142,7 +146,7 @@ struct SQLiteNoteRepository: NoteRepository {
     func updateNoteIfUnchanged(_ note: Note, expectedUpdatedAt: Date) async throws -> Bool {
         let sql = """
             UPDATE note SET folder_id = ?, title = ?, document_json = ?, plain_text = ?, \
-            updated_at = ?, deleted_at = ?, is_favorite = ?, is_pinned = ?, source = ?, \
+            updated_at = ?, deleted_at = ?, source = ?, \
             content_hash = ?, sync_state = ?, kind = ? WHERE id = ? AND updated_at = ?;
             """
         let params: [DatabaseValue] = [
@@ -152,8 +156,6 @@ struct SQLiteNoteRepository: NoteRepository {
             .text(note.plainText),
             .double(note.updatedAt.timeIntervalSince1970),
             note.deletedAt.map { .double($0.timeIntervalSince1970) } ?? .null,
-            .int(note.isFavorite ? 1 : 0),
-            .int(note.isPinned ? 1 : 0),
             .text(note.source.rawValue),
             .text(note.contentHash),
             .text(note.syncState.rawValue),
@@ -163,6 +165,20 @@ struct SQLiteNoteRepository: NoteRepository {
         ]
         let changedRows = try await db.execute(sql, params)
         return changedRows > 0
+    }
+
+    func setLocked(id: UUID, isLocked: Bool) async throws {
+        try await db.execute(
+            "UPDATE note SET is_locked = ? WHERE id = ?;",
+            [.int(isLocked ? 1 : 0), .text(id.uuidString)]
+        )
+    }
+
+    func setPinned(id: UUID, isPinned: Bool) async throws {
+        try await db.execute(
+            "UPDATE note SET is_pinned = ? WHERE id = ?;",
+            [.int(isPinned ? 1 : 0), .text(id.uuidString)]
+        )
     }
 
     func softDeleteNote(id: UUID) async throws {

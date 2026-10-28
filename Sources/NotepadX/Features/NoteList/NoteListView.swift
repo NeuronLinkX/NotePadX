@@ -240,13 +240,25 @@ struct NoteListView: View {
                         .font(.headline)
                         .lineLimit(1)
                     Spacer()
+                    if note.isLocked {
+                        Image(systemName: "lock.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                            .accessibilityLabel("잠김")
+                    }
+                    if note.isPinned {
+                        Image(systemName: "pin.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                            .accessibilityLabel("고정됨")
+                    }
                     if note.isFavorite {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
                             .font(.caption)
                     }
                 }
-                Text(note.previewText.isEmpty ? "추가 텍스트 없음" : note.previewText)
+                Text(note.isLocked ? "잠긴 메모 — 열 때 인증이 필요합니다" : (note.previewText.isEmpty ? "추가 텍스트 없음" : note.previewText))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -279,6 +291,12 @@ struct NoteListView: View {
                             Task { await viewModel.deletePermanently(note) }
                         }
                     } else {
+                        Button(note.isLocked ? "잠금 해제…" : "잠그기") {
+                            Task { await viewModel.toggleLocked(note) }
+                        }
+                        Button(note.isPinned ? "고정 해제" : "맨 위에 고정") {
+                            Task { await viewModel.togglePinned(note) }
+                        }
                         Button(note.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가") {
                             Task { await viewModel.toggleFavorite(note) }
                         }

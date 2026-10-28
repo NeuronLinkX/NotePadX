@@ -32,7 +32,26 @@ protocol NoteRepository: Sendable {
     /// 휴지통에서 사용자가 명시적으로 "지금 완전히 삭제"를 선택했을 때 호출한다.
     func deleteNotePermanently(id: UUID) async throws
     func setFavorite(id: UUID, isFavorite: Bool) async throws
+    /// 목록 맨 위에 고정. 본문·수정 시각은 건드리지 않는 전용 갱신이다.
+    func setPinned(id: UUID, isPinned: Bool) async throws
+    /// 메모 잠금/해제. 본문 저장과 분리된 전용 갱신이라 편집기의 자동 저장이 되돌리지 못한다.
+    func setLocked(id: UUID, isLocked: Bool) async throws
     /// 메모 목록에서 사이드바 폴더로 드래그 앤 드롭했을 때 호출한다. `nil`은 "폴더 없음"으로
     /// 옮긴다는 뜻이다.
     func moveNote(id: UUID, toFolderID folderID: UUID?) async throws
+}
+
+extension NoteRepository {
+    func setLocked(id: UUID, isLocked: Bool) async throws {
+        guard var note = try await fetchNote(id: id), note.isLocked != isLocked else { return }
+        note.isLocked = isLocked
+        try await updateNote(note)
+    }
+
+    /// 전용 구현이 없는 저장소(테스트용 가짜 등)를 위한 기본 구현.
+    func setPinned(id: UUID, isPinned: Bool) async throws {
+        guard var note = try await fetchNote(id: id), note.isPinned != isPinned else { return }
+        note.isPinned = isPinned
+        try await updateNote(note)
+    }
 }

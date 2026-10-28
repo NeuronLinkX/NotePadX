@@ -53,6 +53,12 @@ final class EditorViewModel: NSObject, ObservableObject {
     private let paneInstanceID = UUID()
 
     private(set) var note: Note?
+
+    /// 목록에서 이 메모를 잠그거나 풀었을 때 편집기가 들고 있는 복사본에도 반영한다.
+    func applyLockChange(id: UUID, isLocked: Bool) {
+        guard note?.id == id else { return }
+        note?.isLocked = isLocked
+    }
     /// 내보내기(Export) 시트가 지금 편집 중인 문서 구조를 읽을 수 있도록 노출한다.
     var exportDocument: EditorDocument? { lastDocument }
     /// note.kind == .diagram일 때만 채워진다. SVGViewerView가 이 값을 그리고, 새 SVG를
