@@ -17,9 +17,13 @@ enum AppConfig {
 
     static var isIsolatedProfile: Bool { profile != nil }
 
+    /// 데이터 폴더 이름. 화면에 보이는 앱 이름(displayName)과 **일부러 분리**한다 — 앱 이름을 바꿔도
+    /// 기존 메모가 든 폴더를 계속 가리켜야 하므로 절대 바꾸지 않는다.
+    static let dataDirectoryName = "NotepadX"
+
     /// ~/Library/Application Support/NotepadX (격리 프로필이면 NotepadX-<프로필>)
     static var applicationSupportDirectoryName: String {
-        profile.map { "\(displayName)-\($0)" } ?? displayName
+        profile.map { "\(dataDirectoryName)-\($0)" } ?? dataDirectoryName
     }
 
     /// 환경설정 저장소. 격리 프로필이면 별도 도메인을 쓴다.

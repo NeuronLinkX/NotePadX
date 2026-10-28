@@ -15,6 +15,7 @@ final class QuickCaptureController: NSObject {
     private var panel: NSPanel?
     private var hotKeyRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
+    private var statusItem: NSStatusItem?
 
     var isReady: Bool { service != nil }
 
@@ -26,6 +27,42 @@ final class QuickCaptureController: NSObject {
     func configure(noteUseCase: NoteUseCase) {
         service = QuickCaptureService(noteUseCase: noteUseCase)
         applyHotKeySetting()
+        applyMenuBarSetting()
+    }
+
+    // MARK: - 메뉴 막대 아이콘
+
+    static var isMenuBarEnabled: Bool { AppConfig.defaults.bool(forKey: menuBarEnabledKey) }
+
+    /// SwiftUI의 MenuBarExtra는 실사용 설정에서 메뉴를 끝없이 다시 그려 앱이 멈춰서, AppKit의 상태 항목을 직접 쓴다.
+    func applyMenuBarSetting() {
+        guard Self.isMenuBarEnabled else {
+            if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
+            statusItem = nil
+            return
+        }
+        guard statusItem == nil else { return }
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: AppConfig.displayName)
+        let menu = NSMenu()
+        let quick = NSMenuItem(title: "빠른 메모…", action: #selector(showFromMenu), keyEquivalent: "n")
+        quick.keyEquivalentModifierMask = [.control, .option]
+        quick.target = self
+        menu.addItem(quick)
+        let open = NSMenuItem(title: "\(AppConfig.displayName) 열기", action: #selector(openApp), keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc private func showFromMenu() { show() }
+
+    @objc private func openApp() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
     }
 
     // MARK: - 단축키

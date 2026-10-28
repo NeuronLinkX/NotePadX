@@ -4,7 +4,6 @@ import SwiftUI
 struct NotepadXApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var appearanceStore = AppearanceSettingsStore()
-    @AppStorage(QuickCaptureController.menuBarEnabledKey, store: AppConfig.defaults) private var showsMenuBarItem = false
 
     var body: some Scene {
         WindowGroup(AppConfig.displayName) {
@@ -17,18 +16,6 @@ struct NotepadXApp: App {
             AppCommands()
         }
         .windowToolbarStyle(.unified(showsTitle: true))
-
-        // 메뉴 막대 아이콘(설정 > 연동에서 켜고 끈다). 창이 하나도 없어도 빠른 메모를 열 수 있다.
-        MenuBarExtra("Notepad", systemImage: "note.text", isInserted: $showsMenuBarItem) {
-            Button("빠른 메모…") { QuickCaptureController.shared.show() }
-                .keyboardShortcut("n", modifiers: [.control, .option])
-            Button("Notepad 열기") {
-                NSApp.activate(ignoringOtherApps: true)
-                NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
-            }
-            Divider()
-            Button("종료") { NSApp.terminate(nil) }
-        }
 
         // 설정 화면: 다크 모드/색상 테마를 고르는 모양 탭 등.
         Settings {
