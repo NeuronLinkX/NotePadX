@@ -15,6 +15,9 @@ struct IntegrationSettingsView: View {
                         QuickCaptureController.shared.applyHotKeySetting()
                     }
                 Toggle("메뉴 막대에 아이콘 표시", isOn: $menuBarEnabled)
+                    .onChange(of: menuBarEnabled) { _, _ in
+                        QuickCaptureController.shared.applyMenuBarSetting()
+                    }
             } header: {
                 Text("빠른 메모")
             } footer: {
