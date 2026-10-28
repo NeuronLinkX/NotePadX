@@ -13,13 +13,15 @@
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>NotepadX</string>
+    <string>Notepad</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Apple 메모의 메모를 Notepad로 가져오려면 메모 앱에 접근해야 합니다. 읽기만 하며 메모 앱의 내용은 바꾸지 않습니다.</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.1.0</string>
+    <string>1.5.0</string>
     <key>CFBundleVersion</key>
-    <string>2</string>
+    <string>19</string>
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>LSApplicationCategoryType</key>
@@ -44,6 +46,15 @@
                 <string>msauth.$(PRODUCT_BUNDLE_IDENTIFIER)</string>
             </array>
         </dict>
+        <!-- 위젯에서 메모 열기/새 메모 (notepadx://note/<id>, notepadx://new) -->
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>$(PRODUCT_BUNDLE_IDENTIFIER).widget-link</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>notepadx</string>
+            </array>
+        </dict>
     </array>
     <!-- 메모 목록 → 사이드바 폴더 드래그 앤 드롭용 앱 전용 타입. 실제 드래그 세션은
          프로세스 안에서도 시스템 pasteboard 서버를 거치므로, 코드에서 UTType(exportedAs:)로
@@ -54,7 +65,7 @@
             <key>UTTypeIdentifier</key>
             <string>com.notepadx.app.note-id-list</string>
             <key>UTTypeDescription</key>
-            <string>NotepadX Note ID List</string>
+            <string>Notepad Note ID List</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.data</string>

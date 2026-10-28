@@ -24,6 +24,8 @@ struct OneDriveSyncUseCase: Sendable {
         guard let note = try await noteRepository.fetchNote(id: noteID) else {
             throw AppError.documentCorrupted
         }
+        // 잠긴 메모는 클라우드 폴더에 평문 파일로 복사하지 않는다(업로드도, 원격 내용으로 덮어쓰기도 안 함).
+        guard !note.isLocked else { return .upToDate }
         let syncState = try await syncStateRepository.syncState(forNote: noteID)
         let baseHash = syncState?.lastSyncedContentHash
 

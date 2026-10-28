@@ -21,7 +21,7 @@ enum KeychainError: LocalizedError {
 struct KeychainService: Sendable {
     private let service: String
 
-    init(service: String = AppConfig.bundleIdentifier) {
+    init(service: String = AppConfig.keychainService) {
         self.service = service
     }
 

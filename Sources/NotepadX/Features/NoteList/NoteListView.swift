@@ -42,8 +42,17 @@ struct NoteListView: View {
                     .disabled(viewModel.notes.isEmpty || viewModel.isSearching)
                 }
                 ToolbarItem {
-                    Button {
-                        Task { await viewModel.createNote(folderID: currentFolderID) }
+                    Menu {
+                        Button {
+                            Task { await viewModel.createNote(folderID: currentFolderID) }
+                        } label: {
+                            Label("새 메모", systemImage: "square.and.pencil")
+                        }
+                        Button {
+                            Task { await viewModel.createDiagram(folderID: currentFolderID) }
+                        } label: {
+                            Label("새 SVG 뷰어", systemImage: "square.on.square")
+                        }
                     } label: {
                         Label("새 메모", systemImage: "square.and.pencil")
                     }
@@ -139,6 +148,8 @@ struct NoteListView: View {
             }
         }
         .listStyle(.inset)
+        .onKeyPress(.upArrow) { moveSelection(by: -1, in: viewModel.notes.map(\.id)) }
+        .onKeyPress(.downArrow) { moveSelection(by: 1, in: viewModel.notes.map(\.id)) }
         .overlay {
             if viewModel.notes.isEmpty {
                 ContentUnavailableView(
@@ -156,11 +167,28 @@ struct NoteListView: View {
             }
         }
         .listStyle(.inset)
+        .onKeyPress(.upArrow) { moveSelection(by: -1, in: viewModel.searchResults.map(\.noteID)) }
+        .onKeyPress(.downArrow) { moveSelection(by: 1, in: viewModel.searchResults.map(\.noteID)) }
         .overlay {
             if viewModel.searchResults.isEmpty {
                 ContentUnavailableView.search(text: viewModel.searchQuery)
             }
         }
+    }
+
+    /// 목록 클릭 선택은 onTapGesture로 직접 처리하고 있어(위 주석 참고) List의 내장
+    /// 방향키 이동도 함께 어긋나 있었다 — 방향키도 같은 방식으로 selectedNoteID를
+    /// 직접 옮겨서 클릭 선택과 동일하게 동작하도록 한다. 선택 모드(체크박스)에서는
+    /// 방향키가 checkedNoteIDs와 무관하므로 비활성화한다.
+    private func moveSelection(by delta: Int, in ids: [UUID]) -> KeyPress.Result {
+        guard !viewModel.isSelecting, !ids.isEmpty else { return .ignored }
+        guard let current = viewModel.selectedNoteID, let index = ids.firstIndex(of: current) else {
+            viewModel.selectedNoteID = ids.first
+            return .handled
+        }
+        let newIndex = min(max(index + delta, 0), ids.count - 1)
+        viewModel.selectedNoteID = ids[newIndex]
+        return .handled
     }
 
     private var filterMenu: some View {
@@ -203,17 +231,34 @@ struct NoteListView: View {
             }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
+                    if note.kind == .diagram {
+                        Image(systemName: "square.on.square")
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("SVG 뷰어")
+                    }
                     Text(note.displayTitle)
                         .font(.headline)
                         .lineLimit(1)
                     Spacer()
+                    if note.isLocked {
+                        Image(systemName: "lock.fill")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                            .accessibilityLabel("잠김")
+                    }
+                    if note.isPinned {
+                        Image(systemName: "pin.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                            .accessibilityLabel("고정됨")
+                    }
                     if note.isFavorite {
                         Image(systemName: "star.fill")
                             .foregroundStyle(.yellow)
                             .font(.caption)
                     }
                 }
-                Text(note.previewText.isEmpty ? "추가 텍스트 없음" : note.previewText)
+                Text(note.isLocked ? "잠긴 메모 — 열 때 인증이 필요합니다" : (note.previewText.isEmpty ? "추가 텍스트 없음" : note.previewText))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -246,6 +291,12 @@ struct NoteListView: View {
                             Task { await viewModel.deletePermanently(note) }
                         }
                     } else {
+                        Button(note.isLocked ? "잠금 해제…" : "잠그기") {
+                            Task { await viewModel.toggleLocked(note) }
+                        }
+                        Button(note.isPinned ? "고정 해제" : "맨 위에 고정") {
+                            Task { await viewModel.togglePinned(note) }
+                        }
                         Button(note.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가") {
                             Task { await viewModel.toggleFavorite(note) }
                         }

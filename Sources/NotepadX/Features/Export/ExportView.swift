@@ -106,7 +106,12 @@ struct ExportView: View {
                     Text("내보내는 중…").foregroundStyle(.secondary)
                 }
                 Button("내보내기") {
-                    Task { await viewModel.exportAndSave(note: note, title: title, document: document) }
+                    Task {
+                        await viewModel.exportAndSave(note: note, title: title, document: document)
+                        if viewModel.errorMessage == nil {
+                            dismiss()
+                        }
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(viewModel.isExporting)

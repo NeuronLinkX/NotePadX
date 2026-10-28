@@ -17,11 +17,12 @@ actor SearchIndexService {
             let plainText: String
             let deletedAt: Date?
             let folderName: String?
+            let isLocked: Bool
         }
 
         let rows = try await db.query(
             """
-            SELECT n.title, n.plain_text, n.deleted_at, f.name
+            SELECT n.title, n.plain_text, n.deleted_at, f.name, n.is_locked
             FROM note n LEFT JOIN folder f ON f.id = n.folder_id
             WHERE n.id = ?;
             """,
@@ -31,7 +32,8 @@ actor SearchIndexService {
                 title: row.string(0) ?? "",
                 plainText: row.string(1) ?? "",
                 deletedAt: row.date(2),
-                folderName: row.string(3)
+                folderName: row.string(3),
+                isLocked: row.bool(4) ?? false
             )
         }
 
@@ -52,7 +54,8 @@ actor SearchIndexService {
             [
                 .text(id.uuidString),
                 .text(info.title),
-                .text(info.plainText),
+                // 잠긴 메모는 본문을 색인하지 않는다 — 검색 결과 발췌문으로 내용이 보이면 안 된다.
+                .text(info.isLocked ? "" : info.plainText),
                 .text(tagNames.joined(separator: " ")),
                 .text(info.folderName ?? ""),
             ]
@@ -74,6 +77,7 @@ actor SearchIndexService {
         }
     }
 
+    /// 잠긴 메모는 제목으로만 검색되고, 결과 발췌문(본문)도 비워서 돌려준다.
     func search(query: String, filters: SearchFilters = SearchFilters(), limit: Int = 200) async throws -> [SearchHit] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
@@ -85,9 +89,9 @@ actor SearchIndexService {
             // 이 경우에만 LIKE로 대체한다 (짧은 질의라 성능 영향은 미미하다).
             let pattern = "%\(escapeLike(trimmed))%"
             let sql = """
-                SELECT n.id, n.title, n.plain_text, n.updated_at
+                SELECT n.id, n.title, CASE WHEN n.is_locked = 1 THEN '' ELSE n.plain_text END, n.updated_at
                 FROM note n \(extraJoin)
-                WHERE n.deleted_at IS NULL AND (n.title LIKE ? ESCAPE '\\' OR n.plain_text LIKE ? ESCAPE '\\') \(extraWhere)
+                WHERE n.deleted_at IS NULL AND (n.title LIKE ? ESCAPE '\\' OR (n.is_locked = 0 AND n.plain_text LIKE ? ESCAPE '\\')) \(extraWhere)
                 ORDER BY n.updated_at DESC LIMIT ?;
                 """
             let bindings: [DatabaseValue] = [.text(pattern), .text(pattern)] + extraBindings + [.int(Int64(limit))]
@@ -97,7 +101,7 @@ actor SearchIndexService {
         let escapedQuery = trimmed.replacingOccurrences(of: "\"", with: "\"\"")
         let ftsQuery = "\"\(escapedQuery)\""
         let sql = """
-            SELECT n.id, n.title, n.plain_text, n.updated_at
+            SELECT n.id, n.title, CASE WHEN n.is_locked = 1 THEN '' ELSE n.plain_text END, n.updated_at
             FROM note_fts JOIN note n ON n.id = note_fts.note_id \(extraJoin)
             WHERE note_fts MATCH ? AND n.deleted_at IS NULL \(extraWhere)
             ORDER BY rank LIMIT ?;

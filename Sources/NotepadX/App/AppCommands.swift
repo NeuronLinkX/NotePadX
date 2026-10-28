@@ -10,6 +10,16 @@ private struct SaveActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct ExportActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct ToggleHorizontalSplitActionKey: FocusedValueKey { typealias Value = () -> Void }
 private struct ToggleVerticalSplitActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct FindActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct ReplaceActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct GoToLineActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct NewTabActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct CloseTabActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct PreviousTabActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct NextTabActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct OpenPDFActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct ImportFilesActionKey: FocusedValueKey { typealias Value = () -> Void }
+private struct ImportAppleNotesActionKey: FocusedValueKey { typealias Value = () -> Void }
 
 extension FocusedValues {
     var newNoteAction: (() -> Void)? {
@@ -36,6 +46,46 @@ extension FocusedValues {
         get { self[ToggleVerticalSplitActionKey.self] }
         set { self[ToggleVerticalSplitActionKey.self] = newValue }
     }
+    var findAction: (() -> Void)? {
+        get { self[FindActionKey.self] }
+        set { self[FindActionKey.self] = newValue }
+    }
+    var replaceAction: (() -> Void)? {
+        get { self[ReplaceActionKey.self] }
+        set { self[ReplaceActionKey.self] = newValue }
+    }
+    var goToLineAction: (() -> Void)? {
+        get { self[GoToLineActionKey.self] }
+        set { self[GoToLineActionKey.self] = newValue }
+    }
+    var newTabAction: (() -> Void)? {
+        get { self[NewTabActionKey.self] }
+        set { self[NewTabActionKey.self] = newValue }
+    }
+    var closeTabAction: (() -> Void)? {
+        get { self[CloseTabActionKey.self] }
+        set { self[CloseTabActionKey.self] = newValue }
+    }
+    var previousTabAction: (() -> Void)? {
+        get { self[PreviousTabActionKey.self] }
+        set { self[PreviousTabActionKey.self] = newValue }
+    }
+    var nextTabAction: (() -> Void)? {
+        get { self[NextTabActionKey.self] }
+        set { self[NextTabActionKey.self] = newValue }
+    }
+    var importFilesAction: (() -> Void)? {
+        get { self[ImportFilesActionKey.self] }
+        set { self[ImportFilesActionKey.self] = newValue }
+    }
+    var importAppleNotesAction: (() -> Void)? {
+        get { self[ImportAppleNotesActionKey.self] }
+        set { self[ImportAppleNotesActionKey.self] = newValue }
+    }
+    var openPDFAction: (() -> Void)? {
+        get { self[OpenPDFActionKey.self] }
+        set { self[OpenPDFActionKey.self] = newValue }
+    }
 }
 
 /// 스펙 19절 File/View 메뉴. Format 메뉴는 서식 툴바(EditorToolbar)로 대체했고,
@@ -47,6 +97,16 @@ struct AppCommands: Commands {
     @FocusedValue(\.exportAction) private var exportAction
     @FocusedValue(\.toggleHorizontalSplitAction) private var toggleHorizontalSplitAction
     @FocusedValue(\.toggleVerticalSplitAction) private var toggleVerticalSplitAction
+    @FocusedValue(\.findAction) private var findAction
+    @FocusedValue(\.replaceAction) private var replaceAction
+    @FocusedValue(\.goToLineAction) private var goToLineAction
+    @FocusedValue(\.newTabAction) private var newTabAction
+    @FocusedValue(\.closeTabAction) private var closeTabAction
+    @FocusedValue(\.previousTabAction) private var previousTabAction
+    @FocusedValue(\.nextTabAction) private var nextTabAction
+    @FocusedValue(\.openPDFAction) private var openPDFAction
+    @FocusedValue(\.importFilesAction) private var importFilesAction
+    @FocusedValue(\.importAppleNotesAction) private var importAppleNotesAction
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -57,6 +117,42 @@ struct AppCommands: Commands {
             Button("New Folder") { newFolderAction?() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(newFolderAction == nil)
+
+            // 브라우저 스타일 탭 (스펙: 다중 탭 지원). Ctrl+T/Ctrl+W는 Windows 관례라
+            // macOS 관례인 Cmd+T/Cmd+W로 바꿨다.
+            Button("Quick Note…") { QuickCaptureController.shared.show() }
+                .keyboardShortcut("n", modifiers: [.control, .option])
+
+            Button("New Tab") { newTabAction?() }
+                .keyboardShortcut("t", modifiers: .command)
+                .disabled(newTabAction == nil)
+
+            Button("Close Tab") { closeTabAction?() }
+                .keyboardShortcut("w", modifiers: .command)
+                .disabled(closeTabAction == nil)
+
+            // macOS 표준 탭 이동 단축키(Safari/Terminal/Xcode 공통).
+            Button("Show Previous Tab") { previousTabAction?() }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+                .disabled(previousTabAction == nil)
+
+            Button("Show Next Tab") { nextTabAction?() }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+                .disabled(nextTabAction == nil)
+
+            Divider()
+
+            // Office Viewer(스펙): 노트에 첨부하지 않고도 임의의 PDF를 바로 훑어본다.
+            Button("Open PDF…") { openPDFAction?() }
+                .keyboardShortcut("o", modifiers: .command)
+                .disabled(openPDFAction == nil)
+
+            // 다른 앱에서 쓰던 글을 새 메모로 들여온다(기존 메모는 건드리지 않는다).
+            Button("Import Files…") { importFilesAction?() }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+                .disabled(importFilesAction == nil)
+            Button("Import from Apple Notes…") { importAppleNotesAction?() }
+                .disabled(importAppleNotesAction == nil)
         }
 
         CommandGroup(after: .saveItem) {
@@ -77,6 +173,21 @@ struct AppCommands: Commands {
             Button("Vertical Split") { toggleVerticalSplitAction?() }
                 .keyboardShortcut("d", modifiers: [.command, .option])
                 .disabled(toggleVerticalSplitAction == nil)
+        }
+
+        // 찾기/바꾸기/줄 이동. Windows 관례인 Ctrl+F·Ctrl+H·Ctrl+G 대신, macOS 텍스트
+        // 편집기(Xcode 등)에서 흔히 쓰는 Cmd+F·Cmd+Option+F·Cmd+L로 맞췄다.
+        CommandGroup(after: .textEditing) {
+            Divider()
+            Button("Find…") { findAction?() }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(findAction == nil)
+            Button("Find and Replace…") { replaceAction?() }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+                .disabled(replaceAction == nil)
+            Button("Go to Line…") { goToLineAction?() }
+                .keyboardShortcut("l", modifiers: .command)
+                .disabled(goToLineAction == nil)
         }
     }
 }

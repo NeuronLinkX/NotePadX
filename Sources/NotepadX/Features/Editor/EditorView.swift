@@ -12,10 +12,20 @@ struct EditorView: View {
     var notePickerOptions: [Note]? = nil
     /// nil이면 "분할 닫기" 버튼을 보여주지 않는다.
     var onClosePane: (() -> Void)? = nil
+    /// 왼쪽 검색창에서 검색 중일 때의 검색어. nil/빈 문자열이 아니면 노트를 연 직후
+    /// 본문에서도 같은 검색어로 하이라이트한다.
+    var searchHighlightQuery: String? = nil
+    /// nil이면 "연관 메모" 토글 버튼을 보여주지 않는다(분할의 보조 패널에서는 생략한다 —
+    /// 이 그래프는 노트 하나가 아니라 창 전체에 딸린 부가 시각화라서 하나만 있으면 된다).
+    var noteGraphViewModel: NoteGraphViewModel? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isShowingRevisionHistory = false
     @State private var isShowingExport = false
+    @State private var noteGraphWindowPresenter = NoteGraphWindowPresenter()
+    @ObservedObject private var lockSession = NoteLockSession.shared
+    /// 목록에서 잠금이 바뀌었을 때 다시 그리게 하는 용도(편집기가 들고 있는 note는 @Published가 아니다).
+    @State private var lockRevision = 0
     @StateObject private var llmPanelViewModel: LLMPanelViewModel
 
     init(
@@ -23,25 +33,111 @@ struct EditorView: View {
         noteID: Binding<UUID?>,
         availableTags: [Tag],
         notePickerOptions: [Note]? = nil,
-        onClosePane: (() -> Void)? = nil
+        onClosePane: (() -> Void)? = nil,
+        searchHighlightQuery: String? = nil,
+        noteGraphViewModel: NoteGraphViewModel? = nil
     ) {
         self.viewModel = viewModel
         self._noteID = noteID
         self.availableTags = availableTags
         self.notePickerOptions = notePickerOptions
         self.onClosePane = onClosePane
+        self.searchHighlightQuery = searchHighlightQuery
+        self.noteGraphViewModel = noteGraphViewModel
         _llmPanelViewModel = StateObject(wrappedValue: LLMPanelViewModel(editorViewModel: viewModel))
     }
 
     var body: some View {
+        let withSheets = mainStack
+            .sheet(isPresented: $isShowingRevisionHistory) {
+                RevisionHistoryView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $isShowingExport) {
+                exportSheetContent
+            }
+            .sheet(isPresented: $viewModel.isShowingGoToLine) {
+                goToLineSheet
+            }
+            .sheet(isPresented: Binding(
+                get: { viewModel.pdfPreviewURL != nil },
+                set: { if !$0 { viewModel.pdfPreviewURL = nil } }
+            )) {
+                if let url = viewModel.pdfPreviewURL {
+                    PDFPreviewSheet(url: url, onClose: { viewModel.pdfPreviewURL = nil })
+                }
+            }
+        let withFocusedActions = withSheets
+            .focusedSceneValue(\.exportAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { isShowingExport = true } : nil)
+            .focusedSceneValue(\.findAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { viewModel.toggleFind() } : nil)
+            .focusedSceneValue(\.replaceAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { viewModel.toggleReplace() } : nil)
+            .focusedSceneValue(\.goToLineAction, (viewModel.note != nil && !isDiagramNote && !isLockedOut) ? { viewModel.toggleGoToLine() } : nil)
+        return withFocusedActions
+            .task(id: noteID) {
+                await viewModel.load(noteID: noteID)
+                guard !Task.isCancelled else { return }
+                if let searchHighlightQuery, !searchHighlightQuery.isEmpty {
+                    viewModel.highlightSearchMatches(searchHighlightQuery)
+                }
+            }
+            .onChange(of: searchHighlightQuery) { _, newValue in
+                if let newValue, !newValue.isEmpty {
+                    viewModel.highlightSearchMatches(newValue)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .noteLockChanged)) { notification in
+                guard let id = notification.userInfo?["id"] as? UUID, let locked = notification.userInfo?["isLocked"] as? Bool else { return }
+                viewModel.applyLockChange(id: id, isLocked: locked)
+                lockRevision += 1
+            }
+            .onAppear { viewModel.applyTheme(isDark: colorScheme == .dark) }
+            .onChange(of: colorScheme) { _, newValue in viewModel.applyTheme(isDark: newValue == .dark) }
+            .alert("오류", isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(viewModel.errorMessage ?? "")
+            }
+    }
+
+    @ViewBuilder
+    private var exportSheetContent: some View {
+        if let note = viewModel.note, let document = viewModel.exportDocument {
+            ExportView(viewModel: ExportViewModel(), note: note, title: viewModel.title, document: document)
+        }
+    }
+
+    private var mainStack: some View {
         HStack(spacing: 0) {
-            if viewModel.isShowingOutline, viewModel.note != nil {
+            if viewModel.isShowingOutline, viewModel.note != nil, !isLockedOut {
                 DocumentOutlineView(viewModel: viewModel)
                 Divider()
             }
 
             Group {
-                if viewModel.note != nil {
+                if let note = viewModel.note, isLockedOut {
+                    LockedNoteView(title: note.displayTitle) {
+                        await lockSession.unlock(note.id, reason: "‘\(note.displayTitle)’ 메모를 엽니다")
+                    }
+                } else if let note = viewModel.note, note.kind == .diagram {
+                    VStack(spacing: 0) {
+                        paneHeader
+                        Divider()
+
+                        TextField("제목", text: $viewModel.title)
+                            .textFieldStyle(.plain)
+                            .font(.title2.bold())
+                            .padding([.horizontal, .top], 16)
+                            .padding(.bottom, 4)
+                            .onChange(of: viewModel.title) { _, _ in viewModel.titleChanged() }
+
+                        TagChipsView(viewModel: viewModel, availableTags: availableTags)
+                        Divider()
+
+                        SVGViewerView(svgText: viewModel.svgText, onImport: { viewModel.updateSVG($0) })
+                    }
+                } else if viewModel.note != nil {
                     VStack(spacing: 0) {
                         paneHeader
                         Divider()
@@ -85,33 +181,20 @@ struct EditorView: View {
             }
             .frame(maxWidth: .infinity)
 
-            if llmPanelViewModel.isVisible {
+            if llmPanelViewModel.isVisible, !isLockedOut {
                 Divider()
                 LLMPanelView(viewModel: llmPanelViewModel)
             }
         }
-        .sheet(isPresented: $isShowingRevisionHistory) {
-            RevisionHistoryView(viewModel: viewModel)
-        }
-        .sheet(isPresented: $isShowingExport) {
-            if let note = viewModel.note, let document = viewModel.exportDocument {
-                ExportView(viewModel: ExportViewModel(), note: note, title: viewModel.title, document: document)
-            }
-        }
-        .focusedSceneValue(\.exportAction, viewModel.note != nil ? { isShowingExport = true } : nil)
-        .task(id: noteID) {
-            await viewModel.load(noteID: noteID)
-        }
-        .onAppear { viewModel.applyTheme(isDark: colorScheme == .dark) }
-        .onChange(of: colorScheme) { _, newValue in viewModel.applyTheme(isDark: newValue == .dark) }
-        .alert("오류", isPresented: Binding(
-            get: { viewModel.errorMessage != nil },
-            set: { if !$0 { viewModel.errorMessage = nil } }
-        )) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
+    }
+
+    private var isDiagramNote: Bool { viewModel.note?.kind == .diagram }
+
+    /// 잠긴 메모이고 아직 인증을 통과하지 않았으면 내용(편집기·개요·AI 패널·내보내기)을 전부 막는다.
+    private var isLockedOut: Bool {
+        _ = lockRevision
+        guard let note = viewModel.note else { return false }
+        return note.isLocked && !lockSession.isUnlocked(note.id)
     }
 
     private var paneHeader: some View {
@@ -131,38 +214,42 @@ struct EditorView: View {
 
             Spacer(minLength: 4)
 
-            Button { viewModel.decreaseZoom() } label: { Image(systemName: "minus.magnifyingglass") }
-                .help("축소")
-                .accessibilityLabel("축소")
-            Text("\(Int(viewModel.zoomLevel * 100))%").font(.caption).monospacedDigit().frame(width: 40)
-                .accessibilityLabel("확대 비율 \(Int(viewModel.zoomLevel * 100))퍼센트")
-            Button { viewModel.increaseZoom() } label: { Image(systemName: "plus.magnifyingglass") }
-                .help("확대")
-                .accessibilityLabel("확대")
+            if !isDiagramNote {
+                Button { viewModel.decreaseZoom() } label: { Image(systemName: "minus.magnifyingglass") }
+                    .help("축소")
+                    .accessibilityLabel("축소")
+                Text("\(Int(viewModel.zoomLevel * 100))%").font(.caption).monospacedDigit().frame(width: 40)
+                    .accessibilityLabel("확대 비율 \(Int(viewModel.zoomLevel * 100))퍼센트")
+                Button { viewModel.increaseZoom() } label: { Image(systemName: "plus.magnifyingglass") }
+                    .help("확대")
+                    .accessibilityLabel("확대")
 
-            Button { viewModel.toggleFind() } label: { Image(systemName: "magnifyingglass") }
-                .help("이 패널에서 찾기")
-                .accessibilityLabel("이 패널에서 찾기")
+                Button { viewModel.toggleFind() } label: { Image(systemName: "magnifyingglass") }
+                    .help("이 패널에서 찾기")
+                    .accessibilityLabel("이 패널에서 찾기")
 
-            Picker("", selection: Binding(
-                get: { viewModel.displayMode },
-                set: { viewModel.setDisplayMode($0) }
-            )) {
-                Text("편집").tag(PaneDisplayMode.edit)
-                Text("미리보기").tag(PaneDisplayMode.preview)
+                Picker("", selection: Binding(
+                    get: { viewModel.displayMode },
+                    set: { viewModel.setDisplayMode($0) }
+                )) {
+                    Text("편집").tag(PaneDisplayMode.edit)
+                    Text("미리보기").tag(PaneDisplayMode.preview)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 130)
+                .disabled(viewModel.note == nil)
             }
-            .pickerStyle(.segmented)
-            .frame(width: 130)
-            .disabled(viewModel.note == nil)
 
             if viewModel.note != nil {
-                Button { viewModel.isShowingOutline.toggle() } label: {
-                    Image(systemName: "list.bullet.indent")
+                if !isDiagramNote {
+                    Button { viewModel.isShowingOutline.toggle() } label: {
+                        Image(systemName: "list.bullet.indent")
+                    }
+                    .foregroundStyle(viewModel.isShowingOutline ? Color.accentColor : Color.primary)
+                    .help("문서 개요")
+                    .accessibilityLabel("문서 개요")
+                    .accessibilityAddTraits(viewModel.isShowingOutline ? [.isSelected] : [])
                 }
-                .foregroundStyle(viewModel.isShowingOutline ? Color.accentColor : Color.primary)
-                .help("문서 개요")
-                .accessibilityLabel("문서 개요")
-                .accessibilityAddTraits(viewModel.isShowingOutline ? [.isSelected] : [])
 
                 Menu {
                     Button("버전으로 저장") { Task { await viewModel.saveVersionSnapshot() } }
@@ -175,18 +262,30 @@ struct EditorView: View {
                 .help("버전 기록")
                 .accessibilityLabel("버전 기록")
 
-                Button { isShowingExport = true } label: {
-                    Image(systemName: "square.and.arrow.up")
-                }
-                .help("내보내기…")
-                .accessibilityLabel("내보내기")
+                if !isDiagramNote {
+                    Button { isShowingExport = true } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .help("내보내기…")
+                    .accessibilityLabel("내보내기")
 
-                Button { llmPanelViewModel.isVisible.toggle() } label: {
-                    Image(systemName: llmPanelViewModel.isVisible ? "sparkles.rectangle.stack.fill" : "sparkles")
+                    Button { llmPanelViewModel.isVisible.toggle() } label: {
+                        Image(systemName: llmPanelViewModel.isVisible ? "sparkles.rectangle.stack.fill" : "sparkles")
+                    }
+                    .help("AI 패널")
+                    .accessibilityLabel("AI 패널")
+                    .accessibilityAddTraits(llmPanelViewModel.isVisible ? [.isSelected] : [])
                 }
-                .help("AI 패널")
-                .accessibilityLabel("AI 패널")
-                .accessibilityAddTraits(llmPanelViewModel.isVisible ? [.isSelected] : [])
+
+                if let noteGraphViewModel {
+                    Button { noteGraphWindowPresenter.show(viewModel: noteGraphViewModel) } label: {
+                        Image(systemName: noteGraphViewModel.isVisible ? "point.3.connected.trianglepath.dotted" : "point.3.filled.connected.trianglepath.dotted")
+                    }
+                    .foregroundStyle(noteGraphViewModel.isVisible ? Color.accentColor : Color.primary)
+                    .help("연관 메모 (새 창)")
+                    .accessibilityLabel("연관 메모, 새 창으로 열기")
+                    .accessibilityAddTraits(noteGraphViewModel.isVisible ? [.isSelected] : [])
+                }
             }
 
             if let onClosePane {
@@ -203,28 +302,74 @@ struct EditorView: View {
     }
 
     private var findBar: some View {
-        HStack {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("찾기", text: $viewModel.findQuery, onCommit: { viewModel.performFind() })
-                .textFieldStyle(.plain)
-            Button { viewModel.performFind(backwards: true) } label: { Image(systemName: "chevron.up") }
-                .help("이전 항목 찾기")
-                .accessibilityLabel("이전 항목 찾기")
-            Button { viewModel.performFind() } label: { Image(systemName: "chevron.down") }
-                .help("다음 항목 찾기")
-                .accessibilityLabel("다음 항목 찾기")
-            if viewModel.findHasNoMatch, !viewModel.findQuery.isEmpty {
-                Text("일치하는 항목 없음").font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("찾기", text: $viewModel.findQuery, onCommit: { viewModel.performFind() })
+                    .textFieldStyle(.plain)
+                Button { viewModel.findCaseSensitive.toggle() } label: { Text("Aa").font(.caption.bold()) }
+                    .foregroundStyle(viewModel.findCaseSensitive ? Color.accentColor : Color.secondary)
+                    .help("대소문자 구분")
+                    .accessibilityLabel("대소문자 구분")
+                    .accessibilityAddTraits(viewModel.findCaseSensitive ? [.isSelected] : [])
+                Button { viewModel.performFind(backwards: true) } label: { Image(systemName: "chevron.up") }
+                    .help("이전 항목 찾기")
+                    .accessibilityLabel("이전 항목 찾기")
+                Button { viewModel.performFind() } label: { Image(systemName: "chevron.down") }
+                    .help("다음 항목 찾기")
+                    .accessibilityLabel("다음 항목 찾기")
+                Button { viewModel.toggleReplace() } label: { Image(systemName: "arrow.triangle.2.circlepath") }
+                    .foregroundStyle(viewModel.isShowingReplace ? Color.accentColor : Color.secondary)
+                    .help("바꾸기")
+                    .accessibilityLabel("바꾸기")
+                    .accessibilityAddTraits(viewModel.isShowingReplace ? [.isSelected] : [])
+                if viewModel.findHasNoMatch, !viewModel.findQuery.isEmpty {
+                    Text("일치하는 항목 없음").font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button { viewModel.toggleFind() } label: { Image(systemName: "xmark") }
+                    .help("찾기 닫기")
+                    .accessibilityLabel("찾기 닫기")
             }
-            Spacer()
-            Button { viewModel.toggleFind() } label: { Image(systemName: "xmark") }
-                .help("찾기 닫기")
-                .accessibilityLabel("찾기 닫기")
+
+            if viewModel.isShowingReplace {
+                HStack {
+                    Image(systemName: "arrow.turn.down.right").foregroundStyle(.secondary)
+                    TextField("바꿀 내용", text: $viewModel.replaceText, onCommit: { viewModel.replaceCurrentMatch() })
+                        .textFieldStyle(.plain)
+                    Button("바꾸기") { viewModel.replaceCurrentMatch() }
+                        .disabled(viewModel.findQuery.isEmpty)
+                    Button("모두 바꾸기") { viewModel.replaceAllMatches() }
+                        .disabled(viewModel.findQuery.isEmpty)
+                    if let message = viewModel.findStatusMessage {
+                        Text(message).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+            }
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.regularMaterial)
+    }
+
+    private var goToLineSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("줄 번호로 이동").font(.headline)
+            TextField("줄 번호", text: $viewModel.goToLineInput, onCommit: { viewModel.goToLine() })
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 160)
+            HStack {
+                Spacer()
+                Button("취소") { viewModel.toggleGoToLine() }
+                Button("이동") { viewModel.goToLine() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(Int(viewModel.goToLineInput.trimmingCharacters(in: .whitespaces)) == nil)
+            }
+        }
+        .padding(20)
+        .frame(width: 260)
     }
 
     private var conflictBanner: some View {
@@ -257,7 +402,10 @@ struct EditorView: View {
             if let language = viewModel.selection.codeBlockLanguage {
                 Text("코드 블록 · \(language)")
             }
+            Text("줄 \(viewModel.selection.line), 열 \(viewModel.selection.column)")
             Text(wordCountText)
+            Text(viewModel.lineEndingStyle)
+            Text(viewModel.textEncodingName)
         }
         .font(.caption)
         .foregroundStyle(.secondary)

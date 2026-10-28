@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- 앱이 쓰는 최근 메모 요약 JSON을 읽기 전용으로 읽는다. WidgetSnapshotStore.homeRelativePath와 같아야 한다. -->
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+    <array>
+        <string>/Library/Application Support/NotepadXWidget/</string>
+    </array>
+</dict>
+</plist>

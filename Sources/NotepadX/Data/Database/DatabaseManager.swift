@@ -184,4 +184,92 @@ actor DatabaseManager {
     }
 }
 
+extension DatabaseManager {
+    /// SQLite 온라인 백업 API로 지금 열려 있는 DB의 일관된 스냅샷을 `destination`에 만든다. 파일을
+    /// 그냥 복사하면 아직 WAL에만 있는 최근 변경이 빠지거나 쓰는 도중의 파일이 복사될 수 있지만,
+    /// 이 방법은 항상 한 시점의 완전한 DB를 만든다. 결과 파일은 -wal/-shm 없이 단독으로 열린다.
+    func backup(to destination: URL) throws {
+        guard let db else { throw DatabaseError.openFailed("connection closed") }
+        let fileManager = FileManager.default
+        try? fileManager.removeItem(at: destination)
+
+        var target: OpaquePointer?
+        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        guard sqlite3_open_v2(destination.path, &target, flags, nil) == SQLITE_OK, let target else {
+            let message = target.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown"
+            if let target { sqlite3_close_v2(target) }
+            throw DatabaseError.openFailed(message)
+        }
+
+        guard let copier = sqlite3_backup_init(target, "main", db, "main") else {
+            let message = String(cString: sqlite3_errmsg(target))
+            sqlite3_close_v2(target)
+            throw DatabaseError.stepFailed(message)
+        }
+        var result = sqlite3_backup_step(copier, -1)
+        var retries = 0
+        while (result == SQLITE_BUSY || result == SQLITE_LOCKED) && retries < 50 {
+            sqlite3_sleep(100)
+            retries += 1
+            result = sqlite3_backup_step(copier, -1)
+        }
+        sqlite3_backup_finish(copier)
+        sqlite3_close_v2(target)
+        guard result == SQLITE_DONE else {
+            try? fileManager.removeItem(at: destination)
+            throw DatabaseError.stepFailed("backup step failed (\(result))")
+        }
+
+        // 백업은 원본의 헤더("WAL 모드")까지 그대로 복사한다. 방금 연 연결은 그 사실을 모르기 때문에 같은
+        // 연결에서 journal_mode를 바꾸면 아무 일도 안 일어난다 — 닫고 다시 열어야 WAL을 읽고 DELETE로
+        // 바꿀 수 있다. 그래야 백업이 -wal/-shm 없이 파일 하나로 단독으로 열린다.
+        var reopened: OpaquePointer?
+        if sqlite3_open_v2(destination.path, &reopened, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK {
+            sqlite3_exec(reopened, "PRAGMA journal_mode = DELETE;", nil, nil, nil)
+        }
+        if let reopened { sqlite3_close_v2(reopened) }
+        // WAL에서 빠져나온 뒤에도 빈 -shm 파일이 남는다. 열린 연결이 없고 파일이 이미 단독 모드이므로 지워도 안전하다.
+        for suffix in ["-wal", "-shm"] {
+            try? fileManager.removeItem(atPath: destination.path + suffix)
+        }
+    }
+
+    /// `PRAGMA quick_check` — 페이지/인덱스 구조가 온전한지 빠르게 확인한다. 문제가 없으면 ["ok"].
+    func quickCheck() throws -> [String] {
+        try query("PRAGMA quick_check;") { $0.string(0) ?? "" }
+    }
+
+    /// 지워진 데이터가 차지하던 공간을 파일에서 실제로 돌려준다(WAL 정리 후 VACUUM).
+    func compact() throws {
+        guard let db else { throw DatabaseError.openFailed("connection closed") }
+        sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+        guard sqlite3_exec(db, "VACUUM;", nil, nil, nil) == SQLITE_OK else {
+            throw DatabaseError.stepFailed(String(cString: sqlite3_errmsg(db)))
+        }
+        // WAL 모드에서 VACUUM은 줄어든 DB를 로그(-wal)에 쓸 뿐이라, 한 번 더 체크포인트해야 본 파일이
+        // 실제로 작아진다.
+        sqlite3_exec(db, "PRAGMA wal_checkpoint(TRUNCATE);", nil, nil, nil)
+    }
+
+    /// 파일로 존재하는 DB(백업본 등)를 읽기 전용으로 열어 quick_check만 한다 — 복원하기 전에
+    /// 그 백업이 정말 열리고 온전한지 확인하는 용도.
+    static func verifyFile(at url: URL) -> Bool {
+        var handle: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let handle else {
+            if let handle { sqlite3_close_v2(handle) }
+            return false
+        }
+        defer { sqlite3_close_v2(handle) }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, "PRAGMA quick_check;", -1, &statement, nil) == SQLITE_OK, let statement else { return false }
+        defer { sqlite3_finalize(statement) }
+        var sawRow = false
+        while sqlite3_step(statement) == SQLITE_ROW {
+            sawRow = true
+            guard let text = sqlite3_column_text(statement, 0), String(cString: text) == "ok" else { return false }
+        }
+        return sawRow
+    }
+}
+
 private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)

@@ -1,4 +1,6 @@
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// macOS Notes 스타일 3열 레이아웃 (스펙 4절): 사이드바 / 노트 목록 / 편집기.
 /// 편집기 영역 자체는 분할 편집(스펙 9절)을 지원하는 WorkspaceViewModel이 관리한다.
@@ -6,9 +8,17 @@ struct ContentView: View {
     @StateObject private var sidebarViewModel: SidebarViewModel
     @StateObject private var noteListViewModel: NoteListViewModel
     @StateObject private var workspace: WorkspaceViewModel
+    @StateObject private var openTabs: OpenTabsViewModel
+    @StateObject private var noteGraphViewModel: NoteGraphViewModel
     @ObservedObject private var oneDriveViewModel: OneDriveViewModel
+    @State private var standalonePDFURL: URL?
+    @State private var importSummary: ImportSummary?
+    private let importService: NoteImportService
+    @Binding private var pendingDeepLink: WidgetDeepLink?
 
-    init(environment: AppEnvironment) {
+    init(environment: AppEnvironment, pendingDeepLink: Binding<WidgetDeepLink?>) {
+        _pendingDeepLink = pendingDeepLink
+        importService = NoteImportService(noteUseCase: environment.noteUseCase)
         let sidebar = SidebarViewModel(
             folderUseCase: environment.folderUseCase,
             tagUseCase: environment.tagUseCase
@@ -23,12 +33,15 @@ struct ContentView: View {
             tagUseCase: environment.tagUseCase,
             revisionUseCase: environment.revisionUseCase
         )
+        let tabs = OpenTabsViewModel(noteUseCase: environment.noteUseCase)
+        let noteGraph = NoteGraphViewModel(noteUseCase: environment.noteUseCase)
         // 편집기에서 저장이 성공하면: 1) 노트 목록의 제목/미리보기를 즉시 갱신하고
         // 2) OneDrive 폴더가 설정되어 있으면 그 노트를 자동으로 동기화한다 — 폴더를 한 번
         // 고르고 나면 그 뒤로는 "지금 동기화"를 매번 누르지 않아도 되게 하기 위함이다.
         let oneDrive = environment.oneDriveViewModel
-        let onSaved: (Note) -> Void = { [weak noteList] note in
+        let onSaved: (Note) -> Void = { [weak noteList, weak tabs] note in
             noteList?.applyExternalUpdate(note)
+            tabs?.updateTitle(note.id, title: note.displayTitle)
             Task { await oneDrive.syncNoteIfConfigured(note.id) }
         }
         // 편집기 안에서 태그를 붙이거나 새로 만들면, 또는 노트를 영구 삭제해서 태그가 자동
@@ -46,6 +59,8 @@ struct ContentView: View {
         _sidebarViewModel = StateObject(wrappedValue: sidebar)
         _noteListViewModel = StateObject(wrappedValue: noteList)
         _workspace = StateObject(wrappedValue: workspaceViewModel)
+        _openTabs = StateObject(wrappedValue: tabs)
+        _noteGraphViewModel = StateObject(wrappedValue: noteGraph)
         _oneDriveViewModel = ObservedObject(wrappedValue: environment.oneDriveViewModel)
     }
 
@@ -54,7 +69,56 @@ struct ContentView: View {
         return nil
     }
 
+    private var searchHighlightQuery: String? {
+        noteListViewModel.isSearching ? noteListViewModel.searchQuery : nil
+    }
+
     var body: some View {
+        tabActions(on: fileActions(on: splitLayout))
+            .task {
+                // 지난번에 열어 둔 탭을 되살리고, 마지막에 보던 메모를 다시 선택한다.
+                if let active = await openTabs.restore() {
+                    noteListViewModel.selectedNoteID = active
+                }
+                // 화면 점검용: 격리 프로필에서만, 환경 변수로 준 파일을 시작하자마자 가져온다.
+                if AppConfig.isIsolatedProfile,
+                   let paths = ProcessInfo.processInfo.environment["NOTEPADX_IMPORT_ON_LAUNCH"] {
+                    runImport(urls: paths.split(separator: ":").map { URL(fileURLWithPath: String($0)) })
+                }
+            }
+            .onChange(of: pendingDeepLink, initial: true) { _, link in
+                handleDeepLink(link)
+            }
+            .onChange(of: sidebarViewModel.selection) { _, _ in
+                noteListViewModel.selectedNoteID = nil
+            }
+            .onChange(of: noteListViewModel.selectedNoteID, initial: true) { _, newValue in
+                let knownTitle = noteListViewModel.notes.first(where: { $0.id == newValue })?.displayTitle
+                    ?? noteListViewModel.searchResults.first(where: { $0.noteID == newValue })?.title
+                openTabs.noteOpened(newValue, knownTitle: knownTitle)
+                openTabs.rememberActive(newValue)
+            }
+            .alert("가져오기 결과", isPresented: Binding(
+                get: { importSummary != nil },
+                set: { if !$0 { importSummary = nil } }
+            )) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text(importSummary?.message ?? "")
+            }
+            .sheet(isPresented: Binding(
+                get: { standalonePDFURL != nil },
+                set: { if !$0 { standalonePDFURL = nil } }
+            )) {
+                if let url = standalonePDFURL {
+                    PDFPreviewSheet(url: url, onClose: { standalonePDFURL = nil })
+                }
+            }
+    }
+
+    // body 하나에 modifier를 전부 이어 붙이면 Swift 타입 검사가 시간 초과로 실패해서
+    // 의미 단위(레이아웃 / 파일·편집 메뉴 / 탭 메뉴)로 나눠 둔다.
+    private var splitLayout: some View {
         NavigationSplitView {
             SidebarView(
                 viewModel: sidebarViewModel,
@@ -74,29 +138,113 @@ struct ContentView: View {
             )
             .navigationSplitViewColumnWidth(min: 240, ideal: 300)
         } detail: {
-            editorArea
-        }
-        .focusedSceneValue(\.newNoteAction) {
-            Task { await noteListViewModel.createNote(folderID: currentFolderID) }
-        }
-        .focusedSceneValue(\.newFolderAction) {
-            Task { await sidebarViewModel.createFolder(name: "새 폴더", parentID: currentFolderID) }
-        }
-        .focusedSceneValue(\.saveAction) {
-            Task {
-                await workspace.primaryEditor.flush()
-                if workspace.splitMode.isSplit { await workspace.secondaryEditor.flush() }
+            VStack(spacing: 0) {
+                EditorTabBarView(
+                    tabsViewModel: openTabs,
+                    activeNoteID: $noteListViewModel.selectedNoteID,
+                    onNewTab: { Task { await noteListViewModel.createNote(folderID: currentFolderID) } }
+                )
+                Divider()
+                editorArea
             }
         }
-        .focusedSceneValue(\.toggleHorizontalSplitAction) {
-            workspace.toggleHorizontalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
+    }
+
+    private func fileActions(on content: some View) -> some View {
+        content
+            .focusedSceneValue(\.newNoteAction) {
+                Task { await noteListViewModel.createNote(folderID: currentFolderID) }
+            }
+            .focusedSceneValue(\.newFolderAction) {
+                Task { await sidebarViewModel.createFolder(name: "새 폴더", parentID: currentFolderID) }
+            }
+            .focusedSceneValue(\.saveAction) {
+                Task {
+                    await workspace.primaryEditor.flush()
+                    if workspace.splitMode.isSplit { await workspace.secondaryEditor.flush() }
+                }
+            }
+            .focusedSceneValue(\.toggleHorizontalSplitAction) {
+                workspace.toggleHorizontalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
+            }
+            .focusedSceneValue(\.toggleVerticalSplitAction) {
+                workspace.toggleVerticalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
+            }
+            .focusedSceneValue(\.openPDFAction) { presentPDFOpenPanel() }
+            .focusedSceneValue(\.importFilesAction) { presentImportPanel() }
+            .focusedSceneValue(\.importAppleNotesAction) { importFromAppleNotes() }
+    }
+
+    private func tabActions(on content: some View) -> some View {
+        content
+            .focusedSceneValue(\.newTabAction) {
+                Task { await noteListViewModel.createNote(folderID: currentFolderID) }
+            }
+            .focusedSceneValue(\.closeTabAction, noteListViewModel.selectedNoteID != nil ? {
+                if let id = noteListViewModel.selectedNoteID {
+                    noteListViewModel.selectedNoteID = openTabs.closeTab(id, activeNoteID: id)
+                }
+            } : nil)
+            .focusedSceneValue(\.previousTabAction) { selectAdjacentTab(-1) }
+            .focusedSceneValue(\.nextTabAction) { selectAdjacentTab(1) }
+    }
+
+    private func handleDeepLink(_ link: WidgetDeepLink?) {
+        guard let link else { return }
+        pendingDeepLink = nil
+        switch link {
+        case .openNote(let id):
+            noteListViewModel.selectedNoteID = id
+        case .newNote:
+            Task { await noteListViewModel.createNote(folderID: currentFolderID) }
         }
-        .focusedSceneValue(\.toggleVerticalSplitAction) {
-            workspace.toggleVerticalSplit(primaryNoteID: noteListViewModel.selectedNoteID)
+    }
+
+    private func selectAdjacentTab(_ offset: Int) {
+        if let id = openTabs.neighbor(of: noteListViewModel.selectedNoteID, offset: offset) {
+            noteListViewModel.selectedNoteID = id
         }
-        .onChange(of: sidebarViewModel.selection) { _, _ in
-            noteListViewModel.selectedNoteID = nil
+    }
+
+    /// File > Open PDF… (스펙: Office Viewer). 노트에 첨부하지 않고도 디스크의 임의 PDF를 바로 본다.
+    private func presentImportPanel() {
+        let panel = NSOpenPanel()
+        panel.title = "가져올 파일 선택"
+        panel.message = "Markdown(.md), 텍스트(.txt), Word(.docx) 파일을 새 메모로 가져옵니다."
+        panel.allowedContentTypes = NoteImportService.supportedExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        runImport(urls: panel.urls)
+    }
+
+    private func runImport(urls: [URL]) {
+        Task {
+            let summary = await importService.importFiles(urls, folderID: currentFolderID)
+            await finishImport(summary)
         }
+    }
+
+    private func importFromAppleNotes() {
+        Task {
+            let summary = await importService.importAppleNotes(fetcher: SystemAppleNotesFetcher(), folderID: currentFolderID)
+            await finishImport(summary)
+        }
+    }
+
+    private func finishImport(_ summary: ImportSummary) async {
+        await noteListViewModel.showImported(summary.importedIDs)
+        // 모두 잘 끝났고 경고도 없으면 조용히 새 메모를 연다. 실패나 건너뛴 요소가 있을 때만 알림을 띄운다.
+        if !summary.failures.isEmpty || !summary.warnings.isEmpty { importSummary = summary }
+    }
+
+    private func presentPDFOpenPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        standalonePDFURL = url
     }
 
     @ViewBuilder
@@ -106,7 +254,9 @@ struct ContentView: View {
             EditorView(
                 viewModel: workspace.primaryEditor,
                 noteID: $noteListViewModel.selectedNoteID,
-                availableTags: sidebarViewModel.tags
+                availableTags: sidebarViewModel.tags,
+                searchHighlightQuery: searchHighlightQuery,
+                noteGraphViewModel: noteGraphViewModel
             )
         case .horizontal, .vertical:
             ResizableSplitView(
@@ -118,7 +268,9 @@ struct ContentView: View {
                     noteID: $noteListViewModel.selectedNoteID,
                     availableTags: sidebarViewModel.tags,
                     notePickerOptions: noteListViewModel.notes,
-                    onClosePane: { workspace.closeSplit() }
+                    onClosePane: { workspace.closeSplit() },
+                    searchHighlightQuery: searchHighlightQuery,
+                    noteGraphViewModel: noteGraphViewModel
                 )
             } second: {
                 EditorView(
