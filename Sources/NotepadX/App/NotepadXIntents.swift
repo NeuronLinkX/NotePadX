@@ -26,7 +26,9 @@ struct QuickNoteIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let saved = await QuickCaptureController.shared.saveWhenReady(text)
-        return .result(dialog: saved ? "메모를 저장했어요." : "메모를 저장하지 못했어요. 내용이 비어 있거나 앱이 아직 준비되지 않았어요.")
+        // 삼항 연산자의 결과는 문자열 리터럴이 아니므로 IntentDialog로 명시해서 넘긴다(CI의 Xcode에서 컴파일 오류).
+        let message = saved ? "메모를 저장했어요." : "메모를 저장하지 못했어요. 내용이 비어 있거나 앱이 아직 준비되지 않았어요."
+        return .result(dialog: IntentDialog(stringLiteral: message))
     }
 }
 
