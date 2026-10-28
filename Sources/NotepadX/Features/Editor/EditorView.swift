@@ -26,7 +26,6 @@ struct EditorView: View {
     @ObservedObject private var lockSession = NoteLockSession.shared
     /// 목록에서 잠금이 바뀌었을 때 다시 그리게 하는 용도(편집기가 들고 있는 note는 @Published가 아니다).
     @State private var lockRevision = 0
-    @StateObject private var llmPanelViewModel: LLMPanelViewModel
 
     init(
         viewModel: EditorViewModel,
@@ -44,7 +43,6 @@ struct EditorView: View {
         self.onClosePane = onClosePane
         self.searchHighlightQuery = searchHighlightQuery
         self.noteGraphViewModel = noteGraphViewModel
-        _llmPanelViewModel = StateObject(wrappedValue: LLMPanelViewModel(editorViewModel: viewModel))
     }
 
     var body: some View {
@@ -180,17 +178,12 @@ struct EditorView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-
-            if llmPanelViewModel.isVisible, !isLockedOut {
-                Divider()
-                LLMPanelView(viewModel: llmPanelViewModel)
-            }
         }
     }
 
     private var isDiagramNote: Bool { viewModel.note?.kind == .diagram }
 
-    /// 잠긴 메모이고 아직 인증을 통과하지 않았으면 내용(편집기·개요·AI 패널·내보내기)을 전부 막는다.
+    /// 잠긴 메모이고 아직 인증을 통과하지 않았으면 내용(편집기·개요·내보내기)을 전부 막는다.
     private var isLockedOut: Bool {
         _ = lockRevision
         guard let note = viewModel.note else { return false }
@@ -268,13 +261,6 @@ struct EditorView: View {
                     }
                     .help("내보내기…")
                     .accessibilityLabel("내보내기")
-
-                    Button { llmPanelViewModel.isVisible.toggle() } label: {
-                        Image(systemName: llmPanelViewModel.isVisible ? "sparkles.rectangle.stack.fill" : "sparkles")
-                    }
-                    .help("AI 패널")
-                    .accessibilityLabel("AI 패널")
-                    .accessibilityAddTraits(llmPanelViewModel.isVisible ? [.isSelected] : [])
                 }
 
                 if let noteGraphViewModel {

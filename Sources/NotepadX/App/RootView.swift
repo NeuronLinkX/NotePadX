@@ -5,7 +5,6 @@ import SwiftUI
 struct RootView: View {
     @State private var environment: AppEnvironment?
     @State private var bootstrapError: AppError?
-    @State private var isShowingMissingAPIKeyWarning = false
     /// 위젯에서 앱이 막 켜지는 경우 URL 이벤트가 부트스트랩보다 먼저 오므로, ContentView가
     /// 만들어질 때까지 라우터가 보관해 뒀다가 넘긴다.
     @ObservedObject private var deepLinkRouter = WidgetDeepLinkRouter.shared
@@ -26,24 +25,13 @@ struct RootView: View {
         .task {
             if environment == nil { bootstrap() }
         }
-        .alert("OpenAI API 키가 없습니다", isPresented: $isShowingMissingAPIKeyWarning) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text("AI 기능을 쓰려면 설정 > AI 탭에서 키를 한 번 등록하세요. 등록하면 계속 유지됩니다.")
-        }
     }
 
     private func bootstrap() {
         bootstrapError = nil
         Task {
             do {
-                let bootstrapped = try await AppEnvironment.bootstrap()
-                environment = bootstrapped
-                // 스펙: 등록된 API 키(Keychain, 없으면 OPENAI_API_KEY 환경 변수)가 없으면 최초 진입 시 한 번 알린다.
-                // Keychain 읽기는 접근 허용 창이 뜨면 사용자가 답할 때까지 멈추므로 메인
-                // 스레드가 아닌 곳에서 확인한다 — 창은 이미 떠 있어야 한다.
-                let hasKey = await Task.detached { LLMUseCase().hasAPIKey() }.value
-                isShowingMissingAPIKeyWarning = !hasKey
+                environment = try await AppEnvironment.bootstrap()
             } catch let error as AppError {
                 bootstrapError = error
             } catch {

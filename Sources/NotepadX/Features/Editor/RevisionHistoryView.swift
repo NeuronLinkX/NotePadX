@@ -60,7 +60,7 @@ struct RevisionHistoryView: View {
         case .manualSnapshot: return "수동 저장 버전"
         case .beforeLargeChange: return "큰 변경 전 버전"
         case .beforeRestore: return "복원 전 자동 보관"
-        case .beforeLLMReplace: return "AI 적용 전 버전"
+        case .beforeLLMReplace: return "이전 버전(AI 적용 전)"
         case .beforeExternalSync: return "동기화 전 버전"
         case .beforeConflictResolution: return "충돌 해결 전 버전"
         }
