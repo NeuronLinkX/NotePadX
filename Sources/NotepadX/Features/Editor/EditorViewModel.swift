@@ -418,32 +418,6 @@ final class EditorViewModel: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - LLM 패널 연동 (스펙 16/17절)
-
-    /// LLM 응답으로 문서를 크게 바꾸기 직전에 호출한다 — 복원 가능하도록 리비전을 남긴다.
-    func snapshotBeforeLLMReplace() async {
-        guard let note else { return }
-        await flush()
-        do {
-            try await revisionUseCase.snapshot(note: note, reason: .beforeLLMReplace)
-            await loadRevisions()
-        } catch {
-            report(error)
-        }
-    }
-
-    /// LLM 응답을 "새 메모로 생성"할 때 쓴다. 지금 열려 있는 노트와 같은 폴더에 만든다.
-    func createNoteFromText(title: String, text: String) async {
-        do {
-            let created = try await noteUseCase.createNote(folderID: note?.folderID)
-            let document = EditorDocument.fromPlainText(text)
-            let updated = try noteUseCase.applyEdit(to: created, title: title, document: document, plainText: text)
-            try await noteUseCase.save(updated)
-        } catch {
-            report(error)
-        }
-    }
-
     // MARK: - 내부
 
     private func applyAndScheduleSave(base: Note, title: String, document: EditorDocument, plainText: String) {

@@ -40,8 +40,7 @@ WebEditor    Swift가 아닌 별도 npm 서브프로젝트 (Tiptap 리치 에디
 | 파일 첨부(이미지 아닌 파일 드래그·붙여넣기) | [Services/AttachmentStorage.swift](Sources/NotepadX/Services/AttachmentStorage.swift)(디스크 저장), `EditorViewModel`의 `didRequestSaveAttachment`/`didRequestOpenAttachment`, JS 쪽 `insertFileAttachments`/`FileAttachment` 노드뷰(파일 종류별 아이콘)([WebEditor/src/editor.js](WebEditor/src/editor.js), [WebEditor/src/extensions.js](WebEditor/src/extensions.js)) |
 | 내보내기 (TXT/MD/HTML/RTF/PDF/DOCX) | [Features/Export/](Sources/NotepadX/Features/Export/), 포맷별 실제 구현은 [Features/Export/Exporters/](Sources/NotepadX/Features/Export/Exporters/) |
 | OneDrive 동기화 (Microsoft Graph OAuth, 3-way 충돌) | [Features/OneDrive/](Sources/NotepadX/Features/OneDrive/), [Domain/UseCases/OneDriveSyncUseCase.swift](Sources/NotepadX/Domain/UseCases/OneDriveSyncUseCase.swift) |
-| AI 글쓰기 보조 (OpenAI 연동, 스트리밍) | [Features/LLM/](Sources/NotepadX/Features/LLM/) — `OpenAIClient.swift`(HTTP/스트리밍), `PromptBuilder.swift`(작업별 프롬프트), `LLMPanelView(Model).swift`(패널 UI) |
-| API 키 등 민감정보 저장 | [Services/KeychainService.swift](Sources/NotepadX/Services/KeychainService.swift) |
+| 토큰 등 민감정보 저장(OneDrive) | [Services/KeychainService.swift](Sources/NotepadX/Services/KeychainService.swift) |
 | 앱 리소스(아이콘, Info.plist, entitlements) | [Sources/NotepadX/Resources/](Sources/NotepadX/Resources/) |
 
 ## 3. Swift ↔ JS 브리지 규약

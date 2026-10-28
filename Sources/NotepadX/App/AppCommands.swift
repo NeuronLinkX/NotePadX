@@ -88,8 +88,7 @@ extension FocusedValues {
     }
 }
 
-/// 스펙 19절 File/View 메뉴. Format 메뉴는 서식 툴바(EditorToolbar)로 대체했고,
-/// LLM 패널이 없는 지금은 View 메뉴에서 "Toggle AI Panel"은 뺐다.
+/// 스펙 19절 File/View 메뉴. Format 메뉴는 서식 툴바(EditorToolbar)로 대체했다.
 struct AppCommands: Commands {
     @FocusedValue(\.newNoteAction) private var newNoteAction
     @FocusedValue(\.newFolderAction) private var newFolderAction

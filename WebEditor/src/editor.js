@@ -236,7 +236,7 @@ function postSelection() {
     empty,
     line,
     column,
-    // Phase 7 LLM 패널이 "선택 영역만 보내기"를 하려면 선택된 실제 텍스트가 있어야 한다.
+    // 상태 막대가 선택 영역의 글자수·단어수를 보여주려면 선택된 실제 텍스트가 필요하다.
     selectedText: empty ? "" : editor.state.doc.textBetween(from, to, "\n"),
     activeMarks: ACTIVE_MARKS.filter(mark => editor.isActive(mark)),
     activeBlockType: currentBlockType(),
@@ -434,19 +434,6 @@ const COMMANDS = {
   undo: () => editor.chain().focus().undo().run(),
   redo: () => editor.chain().focus().redo().run(),
   selectAll: () => editor.chain().focus().selectAll().run(),
-  // Phase 7: LLM 응답을 문서에 반영할 때 쓴다. 순수 텍스트를 문단 단위로 쪼개 삽입한다 —
-  // LLM이 마크다운을 돌려줘도 서식 있는 노드로 파싱하지 않고 평문 그대로 넣는다(예상 밖의
-  // 마크업이 섞여 들어오는 것을 막기 위함이며, 필요하면 사용자가 직접 다시 서식을 입힌다).
-  replaceSelectionWithText: args =>
-    editor.chain().focus().deleteSelection().insertContent(textToParagraphNodes((args && args.text) || "")).run(),
-  insertTextBelowSelection: args => {
-    const { to } = editor.state.selection;
-    return editor.chain().focus().setTextSelection(to).insertContent(textToParagraphNodes((args && args.text) || "")).run();
-  },
-  insertTextAtEnd: args => {
-    const endPos = editor.state.doc.content.size;
-    return editor.chain().focus().setTextSelection(endPos).insertContent(textToParagraphNodes((args && args.text) || "")).run();
-  },
   // 왼쪽 개요 패널에서 제목을 클릭했을 때. pos는 postHeadings가 보냈던 값을 그대로
   // 돌려받은 것이라, 그 사이 문서가 바뀌었다면(다른 곳에서 텍스트를 지웠다든지) 범위를
   // 벗어날 수 있으므로 문서 크기로 clamp한다.
@@ -532,14 +519,6 @@ function findAllRanges(query, caseSensitive) {
     return false;
   });
   return ranges;
-}
-
-function textToParagraphNodes(text) {
-  const lines = String(text).split("\n");
-  return lines.map(line => ({
-    type: "paragraph",
-    content: line ? [{ type: "text", text: line }] : [],
-  }));
 }
 
 // Swift는 evaluateJavaScript로 JSON을 그대로 JS 객체 리터럴로 인라인하여 호출하므로

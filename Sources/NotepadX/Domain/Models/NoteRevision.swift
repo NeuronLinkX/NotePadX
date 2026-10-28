@@ -1,8 +1,7 @@
 import Foundation
 
-/// 버전 기록이 생성된 계기. beforeLLMReplace/beforeExternalSync/beforeConflictResolution은
-/// 그 기능(LLM, OneDrive 동기화)이 아직 없는 Phase 3 시점에는 생성되지 않고,
-/// 해당 Phase에서 실제 호출부가 추가된다.
+/// 버전 기록이 생성된 계기. beforeLLMReplace는 AI 기능을 없앤 뒤로 새로 만들어지지 않지만,
+/// 예전에 저장된 버전 기록을 읽을 수 있도록 값은 남겨 둔다.
 enum NoteRevisionReason: String, Codable, Sendable, CaseIterable {
     case periodicEdit
     case manualSnapshot
