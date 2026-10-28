@@ -38,7 +38,7 @@ struct IntegrationSettingsView: View {
             }
 
             Section {
-                Label("단축어 앱에서 'NotepadX' 동작을 찾아 새 메모 만들기 / 텍스트로 메모 만들기를 자동화에 쓸 수 있습니다.", systemImage: "wand.and.stars")
+                Label("단축어 앱에서 'Notepad' 동작을 찾아 새 메모 만들기 / 텍스트로 메모 만들기를 자동화에 쓸 수 있습니다.", systemImage: "wand.and.stars")
                     .font(.callout)
             } header: {
                 Text("단축어")

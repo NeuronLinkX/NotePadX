@@ -21,7 +21,7 @@ enum ExportFormat: String, CaseIterable, Identifiable, Sendable {
         case .rtfd: return "RTFD"
         case .pdf: return "PDF"
         case .docx: return "Word 문서 (DOCX)"
-        case .json: return "NotepadX JSON"
+        case .json: return "Notepad JSON"
         }
     }
 

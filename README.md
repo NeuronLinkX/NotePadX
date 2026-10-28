@@ -1,5 +1,5 @@
 
-# NotepadX
+# Notepad
 
 macOS용 노트 앱. 리치 텍스트/코드 편집, 폴더·태그 정리, 분할 편집, OneDrive 동기화, 다양한 형식 내보내기, OpenAI 기반 AI 글쓰기 보조를 지원합니다.
 
@@ -30,7 +30,7 @@ macOS용 노트 앱. 리치 텍스트/코드 편집, 폴더·태그 정리, 분�
    - 폴더별 및 즐겨찾기 기능으로 빠르게 북마크할 수 있습니다.
 5. **이미지 빠른 삽입**
 
-   - 맥의 기본 캡처 기능을 활용해 NotepadX 본문 내 드래그로 손쉽게 이미지를 삽입할 수 있습니다.
+   - 맥의 기본 캡처 기능을 활용해 Notepad 본문 내 드래그로 손쉽게 이미지를 삽입할 수 있습니다.
 6. **편집모드 / 미리보기 모드**
 
    - 작성 환경에 맞춘 편집모드 및 미리보기 모드를 제공합니다.
@@ -89,6 +89,6 @@ GitHub Actions(`.github/workflows/test.yml`)가 PR마다 빌드·테스트와 We
 
 ## 서명·공증·업데이트
 
-- 지금 배포본은 Apple 개발자 서명이 없어 첫 실행 때 Gatekeeper 경고가 뜹니다(`xattr -cr NotepadX.app`으로 격리 속성을 제거하거나 시스템 설정 > 개인정보 보호 및 보안에서 "확인 없이 열기").
+- 지금 배포본은 Apple 개발자 서명이 없어 첫 실행 때 Gatekeeper 경고가 뜹니다(`xattr -cr Notepad.app`으로 격리 속성을 제거하거나 시스템 설정 > 개인정보 보호 및 보안에서 "확인 없이 열기").
 - 경고 없이 배포하려면 유료 Apple Developer Program 계정이 필요합니다: Developer ID Application 인증서로 서명 → `Scripts/notarize.sh`로 공증/staple. 절차와 사전 준비는 스크립트 머리말에 있습니다. **계정이 없어 이 스크립트는 실행해 보지 못했습니다.**
 - 자동 업데이트(Sparkle 등)는 서명 키와 appcast를 올릴 서버가 있어야 해서 아직 넣지 않았습니다. 지금은 GitHub Releases에서 새 DMG를 받아 덮어 설치하면 되고, 데이터는 `Application Support`에 있어 그대로 유지됩니다.

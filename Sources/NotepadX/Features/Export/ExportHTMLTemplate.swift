@@ -23,7 +23,7 @@ enum ExportHTMLTemplate {
 
         var footer = ""
         if options.includeHeaderFooter {
-            footer = "<footer class=\"nx-export-footer\">NotepadX</footer>"
+            footer = "<footer class=\"nx-export-footer\">Notepad</footer>"
         }
 
         let themeAttr = options.theme.isDark ? "dark" : "light"
@@ -40,7 +40,7 @@ enum ExportHTMLTemplate {
         <html lang="ko" data-theme="\(themeAttr)">
         <head>
         <meta charset="utf-8" />
-        <title>\(HTMLEscape.escape(title.isEmpty ? "NotepadX" : title))</title>
+        <title>\(HTMLEscape.escape(title.isEmpty ? "Notepad" : title))</title>
         <style>
         \(css)
         @page { size: \(pageSizeKeyword); margin: \(marginInches)in; }

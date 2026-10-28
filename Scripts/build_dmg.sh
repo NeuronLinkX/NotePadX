@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# NotepadX를 배포용 DMG로 패키징한다.
+# Notepad(프로젝트/스킴 이름은 NotepadX)를 배포용 DMG로 패키징한다.
 #
 # 사용법: Scripts/build_dmg.sh [Release|Debug]  (기본값 Release)
 #
@@ -22,15 +22,16 @@ set -euo pipefail
 #     프로비저닝 프로필로 다시 archive해서 Xcode Organizer(또는 Transporter 앱)로
 #     업로드해야 한다 — 이 스크립트의 범위 밖이다.
 
-APP_NAME="NotepadX"
+APP_NAME="NotepadX"          # xcodegen 프로젝트·스킴 이름
+PRODUCT_NAME="Notepad"       # 사용자에게 보이는 앱 이름(.app, DMG)
 CONFIGURATION="${1:-Release}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/build"
 ARCHIVE_PATH="$BUILD_DIR/$APP_NAME.xcarchive"
-APP_PATH="$BUILD_DIR/$APP_NAME.app"
+APP_PATH="$BUILD_DIR/$PRODUCT_NAME.app"
 DMG_STAGING="$BUILD_DIR/dmg-staging"
 VERSION="$(defaults read "$ROOT_DIR/Sources/NotepadX/Resources/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "0.1.0")"
-DMG_PATH="$BUILD_DIR/$APP_NAME-$VERSION.dmg"
+DMG_PATH="$BUILD_DIR/$PRODUCT_NAME-$VERSION.dmg"
 
 echo "==> Cleaning $BUILD_DIR"
 rm -rf "$BUILD_DIR"
@@ -45,7 +46,7 @@ xcodebuild -project "$APP_NAME.xcodeproj" -scheme "$APP_NAME" -configuration "$C
   archive -archivePath "$ARCHIVE_PATH"
 
 echo "==> Extracting .app from archive"
-cp -R "$ARCHIVE_PATH/Products/Applications/$APP_NAME.app" "$APP_PATH"
+cp -R "$ARCHIVE_PATH/Products/Applications/$PRODUCT_NAME.app" "$APP_PATH"
 
 echo "==> Staging DMG contents"
 mkdir -p "$DMG_STAGING"
@@ -54,7 +55,7 @@ ln -s /Applications "$DMG_STAGING/Applications"
 
 echo "==> Creating DMG"
 rm -f "$DMG_PATH"
-hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"
+hdiutil create -volname "$PRODUCT_NAME" -srcfolder "$DMG_STAGING" -ov -format UDZO "$DMG_PATH"
 
 echo ""
 echo "==> 서명/공증 상태 점검"

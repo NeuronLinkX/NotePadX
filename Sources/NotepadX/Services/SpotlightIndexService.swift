@@ -77,7 +77,7 @@ actor SpotlightIndexService {
             attributes.title = row.title
             attributes.contentDescription = includePreviews ? row.preview : nil
             attributes.contentModificationDate = row.updatedAt
-            attributes.keywords = ["NotepadX", "메모"]
+            attributes.keywords = ["Notepad", "NotepadX", "메모"]
             return CSSearchableItem(uniqueIdentifier: row.id.uuidString, domainIdentifier: domain, attributeSet: attributes)
         }
     }

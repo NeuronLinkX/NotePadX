@@ -101,7 +101,7 @@ struct RecentNotesWidgetView: View {
                 }
             }
         } else {
-            Text("NotepadX를 한 번 실행하면 최근 메모가 여기에 표시됩니다")
+            Text("Notepad를 한 번 실행하면 최근 메모가 여기에 표시됩니다")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

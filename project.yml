@@ -49,7 +49,7 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_NAME: NotepadX
+        PRODUCT_NAME: Notepad
         PRODUCT_BUNDLE_IDENTIFIER: com.notepadx.app
         INFOPLIST_FILE: Sources/NotepadX/Resources/Info.plist
         GENERATE_INFOPLIST_FILE: NO
@@ -95,7 +95,7 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         BUNDLE_LOADER: "$(TEST_HOST)"
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/NotepadX.app/Contents/MacOS/NotepadX"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Notepad.app/Contents/MacOS/Notepad"
 
 schemes:
   NotepadX:

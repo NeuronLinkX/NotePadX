@@ -19,7 +19,7 @@ struct RootView: View {
             } else if let bootstrapError {
                 BootstrapErrorView(error: bootstrapError, retry: bootstrap)
             } else {
-                ProgressView("NotepadX를 준비하는 중…")
+                ProgressView("Notepad를 준비하는 중…")
                     .frame(minWidth: 480, minHeight: 320)
             }
         }

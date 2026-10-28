@@ -12,7 +12,7 @@ enum AppleNotesError: Error, CustomStringConvertible {
     var description: String {
         switch self {
         case .notAuthorized:
-            return "메모 앱을 제어할 권한이 없습니다. 시스템 설정 > 개인정보 보호 및 보안 > 자동화에서 NotepadX가 '메모'를 제어하도록 허용해 주세요"
+            return "메모 앱을 제어할 권한이 없습니다. 시스템 설정 > 개인정보 보호 및 보안 > 자동화에서 Notepad가 '메모'를 제어하도록 허용해 주세요"
         case .scriptFailed(let detail):
             return "메모 앱에서 가져오지 못했습니다 (\(detail))"
         }

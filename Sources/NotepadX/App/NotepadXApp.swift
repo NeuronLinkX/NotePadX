@@ -19,10 +19,10 @@ struct NotepadXApp: App {
         .windowToolbarStyle(.unified(showsTitle: true))
 
         // 메뉴 막대 아이콘(설정 > 연동에서 켜고 끈다). 창이 하나도 없어도 빠른 메모를 열 수 있다.
-        MenuBarExtra("NotepadX", systemImage: "note.text", isInserted: $showsMenuBarItem) {
+        MenuBarExtra("Notepad", systemImage: "note.text", isInserted: $showsMenuBarItem) {
             Button("빠른 메모…") { QuickCaptureController.shared.show() }
                 .keyboardShortcut("n", modifiers: [.control, .option])
-            Button("NotepadX 열기") {
+            Button("Notepad 열기") {
                 NSApp.activate(ignoringOtherApps: true)
                 NSApp.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
             }

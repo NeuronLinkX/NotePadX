@@ -13,11 +13,11 @@
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
     <key>CFBundleDisplayName</key>
-    <string>NotepadX</string>
+    <string>Notepad</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Apple 메모의 메모를 NotepadX로 가져오려면 메모 앱에 접근해야 합니다. 읽기만 하며 메모 앱의 내용은 바꾸지 않습니다.</string>
+    <string>Apple 메모의 메모를 Notepad로 가져오려면 메모 앱에 접근해야 합니다. 읽기만 하며 메모 앱의 내용은 바꾸지 않습니다.</string>
     <key>CFBundleShortVersionString</key>
     <string>1.5.0</string>
     <key>CFBundleVersion</key>
@@ -65,7 +65,7 @@
             <key>UTTypeIdentifier</key>
             <string>com.notepadx.app.note-id-list</string>
             <key>UTTypeDescription</key>
-            <string>NotepadX Note ID List</string>
+            <string>Notepad Note ID List</string>
             <key>UTTypeConformsTo</key>
             <array>
                 <string>public.data</string>

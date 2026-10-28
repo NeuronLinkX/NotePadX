@@ -5,7 +5,7 @@ import Foundation
 /// 전에 호출돼도(앱이 막 켜지는 중) 준비될 때까지 기다린다.
 struct NewNoteIntent: AppIntent {
     static let title: LocalizedStringResource = "새 메모 만들기"
-    static let description = IntentDescription("NotepadX에서 빈 새 메모를 엽니다.")
+    static let description = IntentDescription("Notepad에서 빈 새 메모를 엽니다.")
     static let openAppWhenRun = true
 
     @MainActor

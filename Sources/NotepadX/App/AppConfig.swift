@@ -3,7 +3,7 @@ import Foundation
 /// 앱 이름, Bundle ID, 표시 문자열을 한 곳에서 관리한다.
 /// 이름을 바꾸고 싶으면 이 파일과 project.yml의 bundleIdPrefix/name만 수정하면 된다.
 enum AppConfig {
-    static let displayName = "NotepadX"
+    static let displayName = "Notepad"
     static let bundleIdentifier = "com.notepadx.app"
 
     /// 개발·시연용 격리 프로필. 환경 변수 `NOTEPADX_PROFILE=demo`로 실행하면 데이터 폴더, 환경설정,

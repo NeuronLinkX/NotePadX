@@ -7,7 +7,7 @@
 #   2) 공증 자격 증명을 키체인에 한 번 저장한다(앱 전용 암호 사용):
 #        xcrun notarytool store-credentials NOTEPADX_NOTARY --apple-id <애플 ID> --team-id <팀 ID>
 #
-# 사용법: NOTARY_PROFILE=NOTEPADX_NOTARY Scripts/notarize.sh build/NotepadX-<버전>.dmg
+# 사용법: NOTARY_PROFILE=NOTEPADX_NOTARY Scripts/notarize.sh build/Notepad-<버전>.dmg
 #
 # 주의: 이 스크립트는 작성자 환경에 Apple 계정이 없어 실제로 실행해 보지 못했다. 첫 실행 때 출력을 확인할 것.
 set -euo pipefail
